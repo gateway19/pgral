@@ -4,6 +4,9 @@ import base64
 import json
 import asyncio
 import shutil
+import webbrowser as wb
+import argparse
+
 from pathlib import Path
 from mimetypes import guess_type
 from fastapi import FastAPI, Request, Form, Query
@@ -329,5 +332,12 @@ if __name__ == "__main__":
     print("  • Прокрутка до низа + движение колёсика вниз = автоматическая подгрузка")
     print("  • Кнопка 'Load more' — ручная подгрузка следующей партии")
     print("="*80 + "\n")
-    
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-u")
+    args = parser.parse_args()
+    if args.u:
+        print(args)
+        wb.open_new_tab(args.u)
+
     uvicorn.run(app, host="0.0.0.0", port=8095)
