@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>View</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-sidebar: #f8f9fa;
+            --text-primary: #000000;
+            --text-secondary: #333333;
+            --border-color: #cccccc;
+            --active-item: #0d6efd;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-primary: #121212;
+                --bg-sidebar: #252526;
+                --text-primary: #ffffff;
+                --text-secondary: #e0e0e0;
+                --border-color: #444444;
+                --active-item: #0d6efd;
+            }
+        }
+
+        body {
+            display: flex;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
+            height: 100vh;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        #sidebar {
+            width: 260px;
+            padding: 12px 0;
+            background: var(--bg-sidebar);
+            overflow-y: auto;
+            border-right: 1px solid var(--border-color);
+        }
+
+        #sidebar div {
+            padding: 8px 16px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        #sidebar div:hover {
+            background: rgba(0,0,0,0.1);
+        }
+
+        #sidebar div.active {
+            background: var(--active-item);
+            color: white;
+        }
+
+        #preview {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+        }
+
+        #preview img {
+            max-width: 98vw;
+            max-height: 98vh;
+            object-fit: contain;
+        }
+
+        #preview .loading {
+            color: #aaa;
+            font-family: monospace;
+        }
+
+        #error {
+            color: #ff6b6b;
+            padding: 20px;
+            font-family: monospace;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="sidebar"></div>
+<div id="preview">
+    <div class="loading">Loading...</div>
+</div>
+<div id="error"></div>
+
+<script>
+let initialLoad = true;
+let currentFileList = [];
+let currentPayload = null;
+
+function showError(msg) {
+    document.getElementById('error').textContent = msg;
+    document.getElementById('error').style.display = 'block';
+    document.querySelector('#preview .loading').style.display = 'none';
+}
+
+function hideError() {
+    document.getElementById('error').style.display = 'none';
+}
+
+function updateSidebar(filename) {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.innerHTML = '';
+    currentFileList.forEach(fname => {
+        const el = document.createElement('div');
+        el.textContent = fname;
+        if (fname.toLowerCase() === filename.toLowerCase()) {
+            el.classList.add('active');
+            if (initialLoad) {
+                setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 10);
+            }
+        }
+        el.onclick = () => switchToImage(fname);
+        sidebar.appendChild(el);
+    });
+}
+
+async function loadImage(filename) {
+    hideError();
+    const preview = document.getElementById('preview');
+    preview.innerHTML = '<div class="loading">Loading image...</div>';
+
+    try {
+        const payload = { ...currentPayload, filename };
+        const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+        const res = await fetch(`/api/view?data=${encodeURIComponent(b64)}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+
+        document.title = `View: ${data.filename}`;
+
+        preview.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = data.image_url + '?t=' + Date.now();
+        img.alt = data.full_path;
+        img.title = data.full_path;
+        preview.appendChild(img);
+
+        currentFileList = data.file_list;
+        currentPayload = JSON.parse(atob(data.encoded_data));
+        updateSidebar(data.filename);
+
+    } catch (err) {
+        showError("Failed to load image: " + err.message);
+    }
+}
+
+function switchToImage(filename) {
+    updateSidebar(filename);
+    history.pushState(null, '', `/view/${btoa(unescape(encodeURIComponent(JSON.stringify({ ...currentPayload, filename }))))}`);
+    document.title = `View: ${filename}`;
+    initialLoad = false;
+    loadImage(filename);
+}
+
+(async () => {
+    const urlParts = window.location.pathname.split('/');
+    const b64Data = urlParts[urlParts.length - 1];
+
+    if (!b64Data) {
+        showError("No view data in URL");
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/view?data=${encodeURIComponent(b64Data)}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+
+        currentFileList = data.file_list;
+        currentPayload = JSON.parse(atob(data.encoded_data));
+
+        updateSidebar(data.filename);
+        loadImage(data.filename);
+        initialLoad = false;
+
+    } catch (err) {
+        showError("Initial load failed: " + err.message);
+    }
+})();
+
+window.addEventListener('popstate', () => {
+    const urlParts = window.location.pathname.split('/');
+    const b64Data = urlParts[urlParts.length - 1];
+    if (b64Data) {
+        window.location.reload();
+    }
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Photo Gallery</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9f9f9;
+            --bg-sidebar: #f8f9fa;
+            --text-primary: #000000;
+            --text-secondary: #333333;
+            --border-color: #cccccc;
+            --button-bg: #007bff;
+            --button-hover: #0069d9;
+            --thumb-shadow: rgba(0,0,0,0.1);
+            --thumb-shadow-hover: rgba(0,0,0,0.15);
+            --active-item: #0d6efd;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-primary: #121212;
+                --bg-secondary: #1e1e1e;
+                --bg-sidebar: #252526;
+                --text-primary: #ffffff;
+                --text-secondary: #e0e0e0;
+                --border-color: #444444;
+                --button-bg: #0d6efd;
+                --button-hover: #0b5ed7;
+                --thumb-shadow: rgba(0,0,0,0.3);
+                --thumb-shadow-hover: rgba(0,0,0,0.4);
+                --active-item: #0d6efd;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            margin: 0;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        #controls {
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        label {
+            display: block;
+            margin: 8px 0 4px;
+            font-weight: bold;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"], input[type="number"] {
+            padding: 8px;
+            font-family: monospace;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: var(--button-bg);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover:not(:disabled) {
+            background: var(--button-hover);
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        #grid-controls {
+            margin-top: 15px;
+        }
+
+        .gallery-grid {
+            display: grid;
+            gap: 12px;
+            padding: 20px;
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        .thumb {
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 6px var(--thumb-shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+            background: var(--bg-primary);
+            position: relative;
+        }
+
+        .thumb:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px var(--thumb-shadow-hover);
+        }
+
+        .thumb img {
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: contain;
+        }
+
+        .thumb-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            height: 100%;
+        }
+
+        #load-more-container {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+
+        #loadMoreBtn {
+            padding: 10px 24px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <form id="filterForm">
+        <label for="folder">Folder path:</label>
+        <input type="text" id="folder" name="folder" value="{{ default_folder }}" required>
+
+        <label for="regex">Regex (optional):</label>
+        <input type="text" id="regex" name="regex" value="{{ default_regex }}">
+
+        <label for="startIndex">Start index (optional):</label>
+        <input type="number" id="startIndex" name="index" min="0" value="0" placeholder="0">
+
+        <button type="submit">Apply Filter</button>
+    </form>
+
+    <div id="grid-controls">
+        <label>
+            Grid columns: 
+            <input type="range" id="cols" min="1" max="10" value="4" style="width: 100px; vertical-align: middle;">
+            <span id="col-value">4</span>
+        </label>
+    </div>
+</div>
+
+<div id="gallery" class="gallery-grid"></div>
+
+<div id="load-more-container">
+    <button id="loadMoreBtn">Load more</button>
+</div>
+
+<script>
+let currentParams = null;
+let currentOffset = 0;
+let hasMore = true;
+let isLoading = false;
+let wheelListener = null;
+let saveMode = {{ 'true' if save_mode else 'false' }};
+let savedFiles = new Set();
+
+async function loadSavedFiles() {
+    if (!saveMode) return;
+    try {
+        const res = await fetch('/results/list');
+        const files = await res.json();
+        savedFiles = new Set(files);
+        updateAllThumbs();
+    } catch (e) {
+        console.warn("Не удалось загрузить список сохранённых файлов:", e);
+    }
+}
+
+function getUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+        path: params.get('path') || '',
+        regex: params.get('regex') || '',
+        index: parseInt(params.get('index')) || 0,
+        save: params.get('save') || ''
+    };
+}
+
+async function applyFilters(folder, regex, startIndex = 0) {
+    currentParams = { folder, regex };
+    currentOffset = startIndex;
+    hasMore = true;
+    isLoading = false;
+    document.getElementById('gallery').innerHTML = '';
+    document.getElementById('load-more-container').style.display = 'none';
+    
+    document.getElementById('folder').value = folder;
+    document.getElementById('regex').value = regex;
+    document.getElementById('startIndex').value = startIndex;
+
+    await loadBatch(currentOffset);
+    if (saveMode) {
+        await loadSavedFiles();
+    }
+}
+
+async function loadBatch(offset) {
+    if (isLoading || !hasMore) return;
+    
+    isLoading = true;
+    const btn = document.getElementById('loadMoreBtn');
+    if (btn) btn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('folder', currentParams.folder);
+    formData.append('regex', currentParams.regex);
+    formData.append('offset', offset);
+    formData.append('limit', 150);
+
+    try {
+        const res = await fetch('/api/filter-paged', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.error) {
+            alert('Error: ' + data.error);
+            hasMore = false;
+        } else {
+            appendThumbs(data.files);
+            currentOffset = data.offset;
+            hasMore = data.has_more;
+        }
+    } catch (err) {
+        alert('Network error: ' + err.message);
+        hasMore = false;
+    }
+
+    isLoading = false;
+    if (btn) btn.disabled = false;
+    updateLoadMoreButton();
+}
+
+function appendThumbs(files) {
+    const gallery = document.getElementById('gallery');
+    files.forEach(fullPath => {
+        const filename = fullPath.replace(/\\/g, '/').split('/').pop();
+        const b64Path = btoa(unescape(encodeURIComponent(fullPath)));
+
+        const viewPayload = {
+            folder: currentParams.folder,
+            regex: currentParams.regex,
+            filename: filename
+        };
+        const viewB64 = btoa(unescape(encodeURIComponent(JSON.stringify(viewPayload))));
+        const viewUrl = `/view/${viewB64}`;
+
+        const link = document.createElement('a');
+        link.href = viewUrl;
+        link.className = 'thumb-link';
+        if (saveMode) {
+            link.dataset.fullPath = fullPath;
+        }
+
+        const img = document.createElement('img');
+        img.src = `/preview/${b64Path}`;
+        img.alt = filename;
+        img.title = filename;
+        img.loading = 'lazy';
+
+        const div = document.createElement('div');
+        div.className = 'thumb';
+        if (saveMode) {
+            div.dataset.fullPath = fullPath;
+        }
+
+        div.appendChild(link);
+        link.appendChild(img);
+        gallery.appendChild(div);
+    });
+}
+
+function updateAllThumbs() {
+    if (!saveMode) return;
+    document.querySelectorAll('.thumb').forEach(thumb => {
+        const fullPath = thumb.dataset.fullPath;
+        const filename = fullPath.replace(/\\/g, '/').split('/').pop();
+        if (savedFiles.has(filename)) {
+            thumb.style.backgroundColor = '#ffebee';
+            thumb.style.border = '4px solid #f44336';
+        } else {
+            thumb.style.backgroundColor = '';
+            thumb.style.border = '';
+        }
+    });
+}
+
+function updateLoadMoreButton() {
+    const container = document.getElementById('load-more-container');
+    if (hasMore && currentOffset > 0) {
+        container.style.display = 'block';
+    } else {
+        container.style.display = 'none';
+        if (wheelListener) {
+            window.removeEventListener('wheel', wheelListener, { passive: true });
+            wheelListener = null;
+        }
+    }
+}
+
+// === Обработка ЛКМ только в save mode ===
+if (saveMode) {
+    document.getElementById('gallery').addEventListener('click', function(event) {
+        if (event.button !== 0) return; // только левый клик
+
+        const link = event.target.closest('.thumb-link');
+        if (!link || !link.dataset.fullPath) return;
+
+        event.preventDefault();
+
+        const fullPath = link.dataset.fullPath;
+        const filename = fullPath.replace(/\\/g, '/').split('/').pop();
+        if (savedFiles.has(filename)) return;
+
+        saveFile(fullPath, filename);
+    });
+}
+
+async function saveFile(fullPath, filename) {
+    try {
+        const res = await fetch('/api/save-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: fullPath })
+        });
+        const data = await res.json();
+        if (data.saved) {
+            savedFiles.add(filename);
+            updateAllThumbs();
+        }
+    } catch (err) {
+        alert('Ошибка сохранения: ' + err.message);
+    }
+}
+
+// === Кнопка Load More ===
+document.getElementById('loadMoreBtn').addEventListener('click', function() {
+    if (!isLoading && hasMore) {
+        loadBatch(currentOffset);
+    }
+});
+
+// === Форма фильтрации ===
+document.getElementById('filterForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const folder = document.getElementById('folder').value;
+    const regex = document.getElementById('regex').value;
+    const index = parseInt(document.getElementById('startIndex').value) || 0;
+    await applyFilters(folder, regex, index);
+});
+
+// === Изменение колонок ===
+document.getElementById('cols').addEventListener('input', function() {
+    const val = this.value;
+    document.getElementById('col-value').textContent = val;
+    document.getElementById('gallery').style.gridTemplateColumns = `repeat(${val}, 1fr)`;
+});
+
+// === Инициализация ===
+document.addEventListener('DOMContentLoaded', () => {
+    const urlParams = getUrlParams();
+    if (urlParams.path) {
+        applyFilters(urlParams.path, urlParams.regex || '', urlParams.index);
+    } else if (saveMode) {
+        loadSavedFiles();
+    }
+});
+
+// === СКРОЛЛ: автозагрузка без задержки ===
+let atBottom = false;
+
+function checkIfAtBottom() {
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollHeight = document.documentElement.scrollHeight;
+    const clientHeight = window.innerHeight;
+    return scrollTop + clientHeight >= scrollHeight - 2;
+}
+
+function handleWheelAtBottom(event) {
+    if (!atBottom || isLoading || !hasMore) return;
+    if (event.deltaY > 0) {
+        loadBatch(currentOffset);
+    }
+}
+
+window.addEventListener('scroll', () => {
+    const wasAtBottom = atBottom;
+    atBottom = checkIfAtBottom();
+
+    if (atBottom && !wasAtBottom && hasMore && !isLoading) {
+        if (!wheelListener) {
+            wheelListener = handleWheelAtBottom;
+            window.addEventListener('wheel', wheelListener, { passive: true });
+        }
+    } else if (!atBottom && wasAtBottom) {
+        if (wheelListener) {
+            window.removeEventListener('wheel', wheelListener, { passive: true });
+            wheelListener = null;
+        }
+    }
+});
+</script>
+
+</body>
+</html>
