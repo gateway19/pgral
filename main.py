@@ -13,41 +13,46 @@ import uvicorn
 from io import BytesIO
 from PIL import Image
 from collections import OrderedDict
+import sys
 
 # --- Настройки ---
 MAX_CACHE_SIZE_MB = 1024
 MAX_CACHE_SIZE_BYTES = MAX_CACHE_SIZE_MB * 1024 * 1024
 BATCH_SIZE = 150
 
-BASE_DIR = Path(__file__).parent.resolve()
+def get_base_dir():
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    else:
+        return Path(__file__).parent.resolve()
+
+BASE_DIR = get_base_dir()
 RESULTS_DIR = BASE_DIR / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+
+def get_templates_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, "templates")
+    else:
+        return "templates"
+
+templates = Jinja2Templates(directory=get_templates_dir())
 
 # RAM caches
 image_content_cache = OrderedDict()
 preview_cache = OrderedDict()
 
-
 def get_local_ip_addresses() -> list[str]:
-    """
-    Возвращает список локальных IPv4-адресов машины (без 127.0.0.1 и loopback).
-    Используется для отображения всех доступных URL при запуске сервера на 0.0.0.0.
-    """
     import socket
     ips = set()
-
-    # Метод 1: через подключение к внешнему адресу (надёжно определяет основной LAN-IP)
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             ips.add(s.getsockname()[0])
     except Exception:
         pass
-
-    # Метод 2: через getaddrinfo хостнейма
     try:
         hostname = socket.gethostname()
         addr_info = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
@@ -57,20 +62,7 @@ def get_local_ip_addresses() -> list[str]:
                 ips.add(ip)
     except Exception:
         pass
-
-    # Метод 3: перебор интерфейсов (работает не везде, но попробуем)
-    try:
-        from socket import AF_INET, SOCK_DGRAM
-        import uuid
-        # Этот метод менее надёжен, но иногда даёт доп. адреса
-        # Пропускаем — основные два метода обычно достаточно
-    except Exception:
-        pass
-
     return sorted(ips)
-
-
-
 
 def get_cache_size(cache):
     return sum(len(content) for _, (_, content, _) in cache.items())
@@ -169,9 +161,12 @@ async def api_filter_paged(
     files = []
     for root, _, filenames in os.walk(normalized_folder):
         for name in filenames:
-            if pattern is None or pattern.search(name):
-                full_path = os.path.join(root, name)
+            full_path = os.path.join(root, name)
+            if pattern is None:
                 files.append(full_path)
+            else:
+                if pattern.search(full_path):
+                    files.append(full_path)
 
     files.sort()
     total = len(files)
@@ -225,23 +220,32 @@ async def api_view(data: str = Query(...)):
     if not os.path.isdir(normalized_folder):
         return JSONResponse({"error": "Folder not found"}, status_code=400)
 
+    # === ИЩЕМ ЦЕЛЕВОЙ ФАЙЛ БЕЗ ФИЛЬТРАЦИИ ===
+    target_file = None
+    for root, _, filenames in os.walk(normalized_folder):
+        for name in filenames:
+            if name.lower() == filename.lower():
+                full_path = os.path.join(root, name)
+                target_file = full_path
+                break
+        if target_file:
+            break
+
+    if not target_file or not os.path.isfile(target_file):
+        return JSONResponse({"error": "File not found in folder"}, status_code=404)
+
+    # === СТРОИМ СПИСОК С УЧЁТОМ REGEX ПО ПОЛНОМУ ПУТИ ===
     try:
         pattern = re.compile(regex, re.IGNORECASE) if regex else None
     except re.error:
         return JSONResponse({"error": "Invalid regex in view data"}, status_code=400)
 
     file_list = []
-    target_file = None
     for root, _, filenames in os.walk(normalized_folder):
         for name in filenames:
-            if pattern is None or pattern.search(name):
-                full_path = os.path.join(root, name)
+            full_path = os.path.join(root, name)
+            if pattern is None or pattern.search(full_path):
                 file_list.append(full_path)
-                if Path(full_path).name.lower() == filename.lower():
-                    target_file = full_path
-
-    if not target_file or not os.path.isfile(target_file):
-        return JSONResponse({"error": "File not found in filtered list"}, status_code=404)
 
     b64_path = base64.urlsafe_b64encode(target_file.encode()).decode()
     image_url = f"/image/{b64_path}"
@@ -259,8 +263,7 @@ async def api_view(data: str = Query(...)):
 async def view_page(request: Request, data: str):
     return templates.TemplateResponse("view.html", {"request": request})
 
-# === SAVE MODE ЭНДПОИНТЫ (ТОЛЬКО ПО ТЗ) ===
-
+# === SAVE MODE ===
 @app.get("/results/list")
 async def list_saved_files():
     try:
@@ -289,6 +292,11 @@ async def save_image(request: Request):
         return JSONResponse({"saved": True})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# === REGEX CHECKER ===
+@app.get("/regexcheck", response_class=HTMLResponse)
+async def regex_check_page(request: Request):
+    return templates.TemplateResponse("regexcheck.html", {"request": request})
 
 # === ЗАПУСК ===
 if __name__ == "__main__":
