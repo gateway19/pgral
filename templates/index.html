@@ -143,7 +143,10 @@
         <label for="folder">Folder path:</label>
         <input type="text" id="folder" name="folder" value="{{ default_folder }}" required>
 
-        <label for="regex">Regex (optional):</label>
+        <label for="regex">
+            Regex (optional):
+            <a href="/regexcheck" target="_blank" style="font-size:12px; margin-left:8px; color:#007bff; text-decoration:underline;">Помощь</a>
+        </label>
         <input type="text" id="regex" name="regex" value="{{ default_regex }}">
 
         <label for="startIndex">Start index (optional):</label>
@@ -240,6 +243,9 @@ async function loadBatch(offset) {
             appendThumbs(data.files);
             currentOffset = data.offset;
             hasMore = data.has_more;
+            if (saveMode) {
+                updateAllThumbs();
+            }
         }
     } catch (err) {
         alert('Network error: ' + err.message);
@@ -257,10 +263,13 @@ function appendThumbs(files) {
         const filename = fullPath.replace(/\\/g, '/').split('/').pop();
         const b64Path = btoa(unescape(encodeURIComponent(fullPath)));
 
+        // === ИЗМЕНЕНО: передаём full_path вместо filename ===
         const viewPayload = {
             folder: currentParams.folder,
             regex: currentParams.regex,
-            filename: filename
+            full_path: fullPath,
+            save: saveMode  // ← добавлено
+
         };
         const viewB64 = btoa(unescape(encodeURIComponent(JSON.stringify(viewPayload))));
         const viewUrl = `/view/${viewB64}`;
@@ -318,20 +327,15 @@ function updateLoadMoreButton() {
     }
 }
 
-// === Обработка ЛКМ только в save mode ===
 if (saveMode) {
     document.getElementById('gallery').addEventListener('click', function(event) {
-        if (event.button !== 0) return; // только левый клик
-
+        if (event.button !== 0) return;
         const link = event.target.closest('.thumb-link');
         if (!link || !link.dataset.fullPath) return;
-
         event.preventDefault();
-
         const fullPath = link.dataset.fullPath;
         const filename = fullPath.replace(/\\/g, '/').split('/').pop();
         if (savedFiles.has(filename)) return;
-
         saveFile(fullPath, filename);
     });
 }
@@ -353,14 +357,12 @@ async function saveFile(fullPath, filename) {
     }
 }
 
-// === Кнопка Load More ===
 document.getElementById('loadMoreBtn').addEventListener('click', function() {
     if (!isLoading && hasMore) {
         loadBatch(currentOffset);
     }
 });
 
-// === Форма фильтрации ===
 document.getElementById('filterForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const folder = document.getElementById('folder').value;
@@ -369,14 +371,12 @@ document.getElementById('filterForm').addEventListener('submit', async function(
     await applyFilters(folder, regex, index);
 });
 
-// === Изменение колонок ===
 document.getElementById('cols').addEventListener('input', function() {
     const val = this.value;
     document.getElementById('col-value').textContent = val;
     document.getElementById('gallery').style.gridTemplateColumns = `repeat(${val}, 1fr)`;
 });
 
-// === Инициализация ===
 document.addEventListener('DOMContentLoaded', () => {
     const urlParams = getUrlParams();
     if (urlParams.path) {
@@ -386,7 +386,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// === СКРОЛЛ: автозагрузка без задержки ===
 let atBottom = false;
 
 function checkIfAtBottom() {

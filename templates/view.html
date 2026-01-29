@@ -11,6 +11,7 @@
             --text-secondary: #333333;
             --border-color: #cccccc;
             --active-item: #0d6efd;
+            --button-bg: #007bff;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -21,6 +22,7 @@
                 --text-secondary: #e0e0e0;
                 --border-color: #444444;
                 --active-item: #0d6efd;
+                --button-bg: #0d6efd;
             }
         }
 
@@ -35,13 +37,13 @@
 
         #sidebar {
             width: 260px;
-            padding: 12px 0;
+            padding: 0;
             background: var(--bg-sidebar);
             overflow-y: auto;
             border-right: 1px solid var(--border-color);
         }
 
-        #sidebar div {
+        #sidebar > div:not(:first-child) {
             padding: 8px 16px;
             cursor: pointer;
             white-space: nowrap;
@@ -51,11 +53,11 @@
             color: var(--text-secondary);
         }
 
-        #sidebar div:hover {
+        #sidebar > div:not(:first-child):hover {
             background: rgba(0,0,0,0.1);
         }
 
-        #sidebar div.active {
+        #sidebar > div.active {
             background: var(--active-item);
             color: white;
         }
@@ -89,7 +91,21 @@
 </head>
 <body>
 
-<div id="sidebar"></div>
+<div id="sidebar">
+    <div style="padding: 8px 16px; border-bottom: 1px solid var(--border-color); margin-bottom: 8px;">
+        <button id="backBtn" style="
+            width: 100%;
+            padding: 6px 0;
+            background: var(--button-bg);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: normal;
+        ">← Back to Gallery</button>
+    </div>
+</div>
 <div id="preview">
     <div class="loading">Loading...</div>
 </div>
@@ -97,7 +113,7 @@
 
 <script>
 let initialLoad = true;
-let currentFileList = [];
+let currentFileListFull = [];
 let currentPayload = null;
 
 function showError(msg) {
@@ -110,30 +126,35 @@ function hideError() {
     document.getElementById('error').style.display = 'none';
 }
 
-function updateSidebar(filename) {
+function updateSidebarByFullPath(fullPath) {
     const sidebar = document.getElementById('sidebar');
+    const backButtonContainer = sidebar.firstElementChild;
     sidebar.innerHTML = '';
-    currentFileList.forEach(fname => {
+    if (backButtonContainer) {
+        sidebar.appendChild(backButtonContainer);
+    }
+
+    currentFileListFull.forEach(fp => {
         const el = document.createElement('div');
-        el.textContent = fname;
-        if (fname.toLowerCase() === filename.toLowerCase()) {
+        el.textContent = fp.replace(/\\/g, '/').split('/').pop();
+        if (fp.toLowerCase() === fullPath.toLowerCase()) {
             el.classList.add('active');
             if (initialLoad) {
                 setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 10);
             }
         }
-        el.onclick = () => switchToImage(fname);
+        el.onclick = () => switchToImageByPath(fp);
         sidebar.appendChild(el);
     });
 }
 
-async function loadImage(filename) {
+async function loadImageByPath(fullPath) {
     hideError();
     const preview = document.getElementById('preview');
     preview.innerHTML = '<div class="loading">Loading image...</div>';
 
     try {
-        const payload = { ...currentPayload, filename };
+        const payload = { ...currentPayload, full_path: fullPath };
         const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
         const res = await fetch(`/api/view?data=${encodeURIComponent(b64)}`);
         if (!res.ok) {
@@ -151,21 +172,33 @@ async function loadImage(filename) {
         img.title = data.full_path;
         preview.appendChild(img);
 
-        currentFileList = data.file_list;
+        currentFileListFull = data.file_list_full;
         currentPayload = JSON.parse(atob(data.encoded_data));
-        updateSidebar(data.filename);
+        updateSidebarByFullPath(data.full_path);
+
+        // Настройка кнопки "Назад"
+        const { folder, regex, save } = currentPayload;
+        const url = new URL('/', window.location.origin);
+        if (folder) url.searchParams.set('path', folder);
+        if (regex) url.searchParams.set('regex', regex);
+        if (save) url.searchParams.set('save', 'true');
+        document.getElementById('backBtn').onclick = () => {
+            window.location.href = url.toString();
+        };
 
     } catch (err) {
         showError("Failed to load image: " + err.message);
     }
 }
 
-function switchToImage(filename) {
-    updateSidebar(filename);
-    history.pushState(null, '', `/view/${btoa(unescape(encodeURIComponent(JSON.stringify({ ...currentPayload, filename }))))}`);
+function switchToImageByPath(fullPath) {
+    const filename = fullPath.replace(/\\/g, '/').split('/').pop();
+    const newPayload = { ...currentPayload, full_path: fullPath };
+    const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(newPayload))));
+    history.pushState(null, '', `/view/${b64}`);
     document.title = `View: ${filename}`;
     initialLoad = false;
-    loadImage(filename);
+    loadImageByPath(fullPath);
 }
 
 (async () => {
@@ -185,11 +218,11 @@ function switchToImage(filename) {
         }
         const data = await res.json();
 
-        currentFileList = data.file_list;
+        currentFileListFull = data.file_list_full;
         currentPayload = JSON.parse(atob(data.encoded_data));
 
-        updateSidebar(data.filename);
-        loadImage(data.filename);
+        updateSidebarByFullPath(data.full_path);
+        loadImageByPath(data.full_path);
         initialLoad = false;
 
     } catch (err) {

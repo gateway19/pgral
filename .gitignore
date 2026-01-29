@@ -11,6 +11,10 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+
+build.bat
+results/*
+
 downloads/
 eggs/
 .eggs/
