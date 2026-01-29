@@ -109,7 +109,7 @@ const GAP_SIZE = 4;
 const SCROLLBAR_WIDTH = 16;
 const BUTTON_HEIGHT = 16;
 const SHOW_SCROLLBAR_BUTTONS = true;
-const SCROLL_INTERVAL_MS = 30; // ~33 FPS
+const SCROLL_INTERVAL_MS = 30;
 
 // === STATE ===
 let initialLoad = true;
@@ -125,7 +125,7 @@ let isDragging = false;
 let dragStartY = 0;
 let dragStartScrollTop = 0;
 
-let autoScrollDirection = 0; // -1 = up, 1 = down
+let autoScrollDirection = 0;
 let autoScrollInterval = null;
 
 // === CANVAS ===
@@ -221,15 +221,13 @@ function renderSidebar() {
         }
     }
 
-    // === Scrollbar ===
+    // Scrollbar
     if (totalContentHeight > height) {
         const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
 
-        // Track
         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
         ctx.fillRect(width - SCROLLBAR_WIDTH, trackTop, SCROLLBAR_WIDTH, trackHeight);
 
-        // Left border
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -237,7 +235,6 @@ function renderSidebar() {
         ctx.lineTo(width - SCROLLBAR_WIDTH, h);
         ctx.stroke();
 
-        // Buttons
         if (SHOW_SCROLLBAR_BUTTONS) {
             ctx.fillStyle = 'rgba(0,0,0,0.15)';
             ctx.fillRect(width - SCROLLBAR_WIDTH, 0, SCROLLBAR_WIDTH, BUTTON_HEIGHT);
@@ -247,7 +244,6 @@ function renderSidebar() {
             drawArrowDown(width - SCROLLBAR_WIDTH + 4, h - BUTTON_HEIGHT + 2, 8, '#666');
         }
 
-        // Thumb
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.fillRect(width - SCROLLBAR_WIDTH, thumbY, SCROLLBAR_WIDTH, thumbHeight);
 
@@ -290,25 +286,21 @@ function handleMouseDown(event) {
 
     const contentWidth = canvas.width - SCROLLBAR_WIDTH;
 
-    // Ignore list area mousedown (we only care about scrollbar)
     if (x >= contentWidth && totalContentHeight > canvas.height) {
         event.preventDefault();
 
         const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
 
-        // Up button
         if (SHOW_SCROLLBAR_BUTTONS && y < BUTTON_HEIGHT) {
             startAutoScroll(-1);
             return;
         }
 
-        // Down button
         if (SHOW_SCROLLBAR_BUTTONS && y > h - BUTTON_HEIGHT) {
             startAutoScroll(1);
             return;
         }
 
-        // Thumb
         if (y >= thumbY && y <= thumbY + thumbHeight) {
             isDragging = true;
             dragStartY = y;
@@ -345,27 +337,23 @@ function handleCanvasClick(event) {
 
     const contentWidth = canvas.width - SCROLLBAR_WIDTH;
 
-    // Click on list
     if (x < contentWidth) {
         const index = Math.floor((y + scrollTop) / (lineHeight + GAP_SIZE));
         if (index >= 0 && index < currentFileListFull.length) {
             selectedIndex = index;
             renderSidebar();
-            switchToImageByPath(currentFileListFull[selectedIndex]);
+            switchToImageByPath(currentFileListFull[index]);
         }
         return;
     }
 
-    // Click on scrollbar track (not buttons, not thumb)
     if (totalContentHeight <= canvas.height) return;
 
     const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
 
-    // Skip if clicked on buttons or thumb (already handled by mousedown)
     if (SHOW_SCROLLBAR_BUTTONS && (y < BUTTON_HEIGHT || y > h - BUTTON_HEIGHT)) return;
     if (y >= thumbY && y <= thumbY + thumbHeight) return;
 
-    // Jump to position
     const scrollableTrack = trackHeight - thumbHeight;
     if (scrollableTrack <= 0) return;
 
@@ -374,13 +362,11 @@ function handleCanvasClick(event) {
     scrollToPosition(targetScroll);
 }
 
-// Attach events
 canvas.addEventListener('mousedown', handleMouseDown);
 canvas.addEventListener('click', handleCanvasClick);
 window.addEventListener('mousemove', handleMouseMove);
 window.addEventListener('mouseup', handleMouseUp);
 
-// Wheel
 function onWheel(e) {
     if (totalContentHeight <= canvas.height) return;
     scrollToPosition(scrollTop + e.deltaY);
@@ -388,7 +374,6 @@ function onWheel(e) {
 }
 canvas.addEventListener('wheel', onWheel, { passive: false });
 
-// Resize
 window.addEventListener('resize', () => {
     updateMetrics();
     renderSidebar();
@@ -405,29 +390,41 @@ function hideError() {
     document.getElementById('error').style.display = 'none';
 }
 
-async function loadImageByPath(fullPath) {
-    hideError();
-    const preview = document.getElementById('preview');
-    preview.innerHTML = '<div class="loading">Loading image...</div>';
+// === ОСНОВНЫЕ ФУНКЦИИ ===
 
+/**
+ * Генерирует URL для /image: /image/<base64_path>?t=...
+ */
+function encodePathToImageURL(fullPath) {
+    const b64 = btoa(unescape(encodeURIComponent(fullPath)));
+    return `/image/${b64}?t=${Date.now()}`;
+}
+
+/**
+ * Быстро показывает изображение — только по fullPath
+ */
+function showImageImmediately(fullPath) {
+    const preview = document.getElementById('preview');
+    preview.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = encodePathToImageURL(fullPath);
+    img.alt = fullPath;
+    img.title = fullPath;
+    document.title = `View: ${fullPath.replace(/\\/g, '/').split('/').pop()}`;
+    preview.appendChild(img);
+}
+
+/**
+ * Загружает метаданные — только при первой загрузке
+ */
+async function loadMetadataAndSidebar(b64Payload) {
     try {
-        const payload = { ...currentPayload, full_path: fullPath };
-        const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-        const res = await fetch(`/api/view?data=${encodeURIComponent(b64)}`);
+        const res = await fetch(`/api/view?data=${encodeURIComponent(b64Payload)}`);
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.error || `HTTP ${res.status}`);
         }
         const data = await res.json();
-
-        document.title = `View: ${data.filename}`;
-
-        preview.innerHTML = '';
-        const img = document.createElement('img');
-        img.src = data.image_url + '?t=' + Date.now();
-        img.alt = data.full_path;
-        img.title = data.full_path;
-        preview.appendChild(img);
 
         currentFileListFull = data.file_list_full;
         currentPayload = JSON.parse(atob(data.encoded_data));
@@ -450,18 +447,25 @@ async function loadImageByPath(fullPath) {
         };
 
     } catch (err) {
-        showError("Failed to load image: " + err.message);
+        console.warn("Metadata load failed:", err.message);
     }
 }
 
+/**
+ * Переключение на другой файл — без запроса к /api/view
+ */
 function switchToImageByPath(fullPath) {
-    const filename = fullPath.replace(/\\/g, '/').split('/').pop();
     const newPayload = { ...currentPayload, full_path: fullPath };
-    const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(newPayload))));
-    history.pushState(null, '', `/view/${b64}`);
-    document.title = `View: ${filename}`;
-    initialLoad = false;
-    loadImageByPath(fullPath);
+    const newB64 = btoa(unescape(encodeURIComponent(JSON.stringify(newPayload))));
+    history.pushState(null, '', `/view/${newB64}`);
+
+    selectedIndex = currentFileListFull.findIndex(fp =>
+        fp.toLowerCase() === fullPath.toLowerCase()
+    );
+    if (selectedIndex === -1) selectedIndex = 0;
+
+    renderSidebar();
+    showImageImmediately(fullPath);
 }
 
 // === INIT ===
@@ -475,25 +479,15 @@ function switchToImageByPath(fullPath) {
     }
 
     try {
-        const res = await fetch(`/api/view?data=${encodeURIComponent(b64Data)}`);
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || `HTTP ${res.status}`);
-        }
-        const data = await res.json();
+        const decoded = JSON.parse(atob(b64Data));
+        const fullPath = decoded.full_path;
+        if (!fullPath) throw new Error("full_path missing");
 
-        currentFileListFull = data.file_list_full;
-        currentPayload = JSON.parse(atob(data.encoded_data));
+        currentPayload = decoded;
 
-        selectedIndex = currentFileListFull.findIndex(fp =>
-            fp.toLowerCase() === data.full_path.toLowerCase()
-        );
-        if (selectedIndex === -1) selectedIndex = 0;
+        await showImageImmediately(fullPath);
+        await loadMetadataAndSidebar(b64Data);
 
-        updateMetrics();
-        renderSidebar();
-
-        loadImageByPath(data.full_path);
         initialLoad = false;
 
     } catch (err) {
