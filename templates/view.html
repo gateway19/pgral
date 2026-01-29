@@ -12,6 +12,7 @@
             --border-color: #cccccc;
             --active-item: #0d6efd;
             --button-bg: #007bff;
+            --mobile-breakpoint: 768px; /* ← изменяйте здесь */
         }
 
         @media (prefers-color-scheme: dark) {
@@ -38,19 +39,20 @@
         #sidebar {
             width: 260px;
             background: var(--bg-sidebar);
-            border-right: 1px solid var(--border-color);
+            border-right: 1px solid(var(--border-color));
             position: relative;
             overflow: hidden;
         }
 
         #backButtonContainer {
             padding: 8px 16px;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 1px solid(var(--border-color));
             margin-bottom: 0px;
         }
 
         #sidebar canvas {
             display: block;
+            touch-action: none; /* ← КРИТИЧЕСКИ ВАЖНО для сенсора */
         }
 
         #preview {
@@ -59,6 +61,7 @@
             justify-content: center;
             align-items: center;
             background: #000;
+            position: relative;
         }
 
         #preview img {
@@ -77,6 +80,37 @@
             padding: 20px;
             font-family: monospace;
             display: none;
+        }
+
+        #mobileBurger {
+            display: none;
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 36px;
+            height: 36px;
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 5;
+        }
+
+        body.mobile-mode #sidebar {
+            position: absolute;
+            z-index: 10;
+            height: 100vh;
+            transform: translateX(-100%);
+        }
+
+        body.mobile-mode #sidebar.visible {
+            transform: translateX(0);
+        }
+
+        body.mobile-mode #mobileBurger {
+            display: block;
         }
     </style>
 </head>
@@ -99,11 +133,55 @@
     <canvas id="sidebarCanvas"></canvas>
 </div>
 <div id="preview">
+    <button id="mobileBurger">≡</button>
     <div class="loading">Loading...</div>
 </div>
 <div id="error"></div>
 
 <script>
+// === UNIVERSAL MOBILE DETECTION ===
+function getMobileBreakpoint() {
+    const style = getComputedStyle(document.documentElement);
+    const value = style.getPropertyValue('--mobile-breakpoint').trim();
+    const num = parseFloat(value);
+    return isNaN(num) ? 768 : num;
+}
+
+function isMobileDevice() {
+    const hasTouch = 'ontouchstart' in window || (navigator.maxTouchPoints > 1);
+    const mobileUA = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+        navigator.userAgent.toLowerCase()
+    );
+    const isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    return hasTouch || mobileUA || isCoarse;
+}
+
+function isInMobileMode() {
+    const breakpoint = getMobileBreakpoint();
+    const isNarrow = window.innerWidth <= breakpoint;
+    const isMobile = isMobileDevice();
+    return isNarrow || isMobile;
+}
+
+function updateLayoutMode() {
+    if (isInMobileMode()) {
+        document.body.classList.add('mobile-mode');
+    } else {
+        document.body.classList.remove('mobile-mode');
+        document.getElementById('sidebar').classList.add('visible');
+    }
+}
+
+// Initialize layout
+updateLayoutMode();
+
+// === BURGER BUTTON ===
+document.getElementById('mobileBurger').addEventListener('click', () => {
+    if (document.body.classList.contains('mobile-mode')) {
+        document.getElementById('sidebar').classList.toggle('visible');
+    }
+});
+
 // === CONFIGURATION ===
 const GAP_SIZE = 4;
 const SCROLLBAR_WIDTH = 16;
@@ -221,7 +299,6 @@ function renderSidebar() {
         }
     }
 
-    // Scrollbar
     if (totalContentHeight > height) {
         const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
 
@@ -343,6 +420,10 @@ function handleCanvasClick(event) {
             selectedIndex = index;
             renderSidebar();
             switchToImageByPath(currentFileListFull[index]);
+
+            if (document.body.classList.contains('mobile-mode')) {
+                document.getElementById('sidebar').classList.remove('visible');
+            }
         }
         return;
     }
@@ -362,11 +443,93 @@ function handleCanvasClick(event) {
     scrollToPosition(targetScroll);
 }
 
+// === TOUCH HANDLERS (FULL SUPPORT) ===
+let touchStartY = 0;
+let touchStartScrollTop = 0;
+let isTrackingTouch = false;
+
+function handleTouchStart(event) {
+    if (event.touches.length !== 1) return;
+    
+    const touch = event.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const contentWidth = canvas.width - SCROLLBAR_WIDTH;
+
+    // Если касание в области scrollbar'а — обрабатываем как раньше
+    if (x >= contentWidth && totalContentHeight > canvas.height) {
+        event.preventDefault();
+        const fakeEvent = { clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => {} };
+        handleMouseDown(fakeEvent);
+        return;
+    }
+
+    // Начинаем отслеживать свайп по списку
+    touchStartY = touch.clientY;
+    touchStartScrollTop = scrollTop;
+    isTrackingTouch = true;
+}
+
+function handleTouchMove(event) {
+    if (!isTrackingTouch || event.touches.length !== 1 || totalContentHeight <= canvas.height) return;
+
+    const touch = event.touches[0];
+    const deltaY = touch.clientY - touchStartY;
+    const newScroll = touchStartScrollTop - deltaY;
+
+    event.preventDefault(); // блокируем скролл страницы
+    scrollToPosition(newScroll);
+}
+
+function handleTouchEnd(event) {
+    isTrackingTouch = false;
+    handleMouseUp(event); // завершаем drag scrollbar'а, если был
+
+    if (event.changedTouches.length === 0) return;
+    const touch = event.changedTouches[0];
+
+    const rect = canvas.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    const contentWidth = canvas.width - SCROLLBAR_WIDTH;
+
+    // Игнорируем клик, если касание было на scrollbar'е
+    if (x >= contentWidth) return;
+
+    // Определяем: тап или свайп?
+    const deltaY = Math.abs(touch.clientY - touchStartY);
+    const isTap = deltaY < 8; // порог в пикселях
+
+    if (isTap) {
+        const index = Math.floor((y + scrollTop) / (lineHeight + GAP_SIZE));
+        if (index >= 0 && index < currentFileListFull.length) {
+            selectedIndex = index;
+            renderSidebar();
+            switchToImageByPath(currentFileListFull[index]);
+
+            if (document.body.classList.contains('mobile-mode')) {
+                document.getElementById('sidebar').classList.remove('visible');
+            }
+        }
+    }
+}
+
+// === EVENT LISTENERS ===
+// Mouse
 canvas.addEventListener('mousedown', handleMouseDown);
 canvas.addEventListener('click', handleCanvasClick);
 window.addEventListener('mousemove', handleMouseMove);
 window.addEventListener('mouseup', handleMouseUp);
 
+// Touch
+canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+canvas.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+// Prevent context menu on long press
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Wheel
 function onWheel(e) {
     if (totalContentHeight <= canvas.height) return;
     scrollToPosition(scrollTop + e.deltaY);
@@ -374,7 +537,9 @@ function onWheel(e) {
 }
 canvas.addEventListener('wheel', onWheel, { passive: false });
 
+// Resize
 window.addEventListener('resize', () => {
+    updateLayoutMode();
     updateMetrics();
     renderSidebar();
 });
@@ -390,33 +555,28 @@ function hideError() {
     document.getElementById('error').style.display = 'none';
 }
 
-// === ОСНОВНЫЕ ФУНКЦИИ ===
-
-/**
- * Генерирует URL для /image: /image/<base64_path>?t=...
- */
 function encodePathToImageURL(fullPath) {
     const b64 = btoa(unescape(encodeURIComponent(fullPath)));
     return `/image/${b64}?t=${Date.now()}`;
 }
 
-/**
- * Быстро показывает изображение — только по fullPath
- */
 function showImageImmediately(fullPath) {
     const preview = document.getElementById('preview');
-    preview.innerHTML = '';
+    preview.innerHTML = '<button id="mobileBurger">≡</button>';
     const img = document.createElement('img');
     img.src = encodePathToImageURL(fullPath);
     img.alt = fullPath;
     img.title = fullPath;
     document.title = `View: ${fullPath.replace(/\\/g, '/').split('/').pop()}`;
     preview.appendChild(img);
+
+    document.getElementById('mobileBurger').addEventListener('click', () => {
+        if (document.body.classList.contains('mobile-mode')) {
+            document.getElementById('sidebar').classList.toggle('visible');
+        }
+    });
 }
 
-/**
- * Загружает метаданные — только при первой загрузке
- */
 async function loadMetadataAndSidebar(b64Payload) {
     try {
         const res = await fetch(`/api/view?data=${encodeURIComponent(b64Payload)}`);
@@ -451,9 +611,6 @@ async function loadMetadataAndSidebar(b64Payload) {
     }
 }
 
-/**
- * Переключение на другой файл — без запроса к /api/view
- */
 function switchToImageByPath(fullPath) {
     const newPayload = { ...currentPayload, full_path: fullPath };
     const newB64 = btoa(unescape(encodeURIComponent(JSON.stringify(newPayload))));
@@ -466,6 +623,10 @@ function switchToImageByPath(fullPath) {
 
     renderSidebar();
     showImageImmediately(fullPath);
+
+    if (document.body.classList.contains('mobile-mode')) {
+        document.getElementById('sidebar').classList.remove('visible');
+    }
 }
 
 // === INIT ===
