@@ -263,10 +263,13 @@ function appendThumbs(files) {
         const filename = fullPath.replace(/\\/g, '/').split('/').pop();
         const b64Path = btoa(unescape(encodeURIComponent(fullPath)));
 
+        // === ИЗМЕНЕНО: передаём full_path вместо filename ===
         const viewPayload = {
             folder: currentParams.folder,
             regex: currentParams.regex,
-            filename: filename
+            full_path: fullPath,
+            save: saveMode  // ← добавлено
+
         };
         const viewB64 = btoa(unescape(encodeURIComponent(JSON.stringify(viewPayload))));
         const viewUrl = `/view/${viewB64}`;

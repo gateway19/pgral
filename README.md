@@ -5,7 +5,7 @@ pgral (Photo gallery grid app local)
 # run 
 Download lastest [release](https://github.com/gateway19/pgral/releases)  \
 save to folder \
-Create shortcut  pgral.exe -u "http://127.0.0.1:8095/?path=C:\Users\username\Downloads\&regex=.*\.(png|jpg|jpeg)$"
+Create shortcut  PROGRAM_PATH/pgral.exe -u "http://127.0.0.1:8095/?path=C:\Users\username\Downloads\&regex=.*\.(png|jpg|jpeg)$"
 
 
 # dev 

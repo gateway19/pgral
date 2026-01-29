@@ -205,6 +205,7 @@ async def serve_preview(b64_path: str):
     except Exception:
         return HTMLResponse("Preview not available", status_code=404)
 
+# === ИСПРАВЛЕННЫЙ /api/view ===
 @app.get("/api/view")
 async def api_view(data: str = Query(...)):
     try:
@@ -212,53 +213,45 @@ async def api_view(data: str = Query(...)):
         params = json.loads(decoded)
         folder = params["folder"]
         regex = params["regex"]
-        filename = params["filename"]
+        full_path = params["full_path"]  # ← теперь полный путь
     except Exception:
         return JSONResponse({"error": "Invalid data"}, status_code=400)
 
-    if '/' in filename or '\\' in filename:
-        return JSONResponse({"error": "Invalid filename"}, status_code=400)
-
     normalized_folder = normalize_path(folder)
-    if not os.path.isdir(normalized_folder):
-        return JSONResponse({"error": "Folder not found"}, status_code=400)
+    normalized_file = Path(normalize_path(full_path))
 
-    # === ИЩЕМ ЦЕЛЕВОЙ ФАЙЛ БЕЗ ФИЛЬТРАЦИИ ===
-    target_file = None
-    for root, _, filenames in os.walk(normalized_folder):
-        for name in filenames:
-            if name.lower() == filename.lower():
-                full_path = os.path.join(root, name)
-                target_file = full_path
-                break
-        if target_file:
-            break
+    # Проверка: файл внутри folder?
+    try:
+        normalized_file.relative_to(normalized_folder)
+    except ValueError:
+        return JSONResponse({"error": "File outside base folder"}, status_code=403)
 
-    if not target_file or not os.path.isfile(target_file):
-        return JSONResponse({"error": "File not found in folder"}, status_code=404)
+    if not normalized_file.is_file():
+        return JSONResponse({"error": "File not found"}, status_code=404)
 
-    # === СТРОИМ СПИСОК С УЧЁТОМ REGEX ПО ПОЛНОМУ ПУТИ ===
+    # Строим список с учётом regex — возвращаем ПОЛНЫЕ ПУТИ
     try:
         pattern = re.compile(regex, re.IGNORECASE) if regex else None
     except re.error:
         return JSONResponse({"error": "Invalid regex in view data"}, status_code=400)
 
-    file_list = []
+    file_list_full = []
     for root, _, filenames in os.walk(normalized_folder):
         for name in filenames:
-            full_path = os.path.join(root, name)
-            if pattern is None or pattern.search(full_path):
-                file_list.append(full_path)
+            fp = os.path.join(root, name)
+            if pattern is None or pattern.search(fp):
+                file_list_full.append(fp)
 
-    b64_path = base64.urlsafe_b64encode(target_file.encode()).decode()
+    b64_path = base64.urlsafe_b64encode(str(normalized_file).encode()).decode()
     image_url = f"/image/{b64_path}"
-    filenames_only = [Path(fp).name for fp in file_list]
+    filenames_only = [Path(fp).name for fp in file_list_full]
 
     return JSONResponse({
-        "filename": Path(target_file).name,
-        "full_path": target_file,
+        "filename": normalized_file.name,
+        "full_path": str(normalized_file),
         "image_url": image_url,
         "file_list": filenames_only,
+        "file_list_full": file_list_full,  # ← добавлено
         "encoded_data": data
     })
 
