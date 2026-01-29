@@ -1,144 +1,146 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>View</title>
-    <style>
-        :root {
-            --bg-primary: #ffffff;
-            --bg-sidebar: #f8f9fa;
-            --text-primary: #000000;
-            --text-secondary: #333333;
-            --border-color: #cccccc;
-            --active-item: #0d6efd;
-            --button-bg: #007bff;
-            --mobile-breakpoint: 768px; /* ← изменяйте здесь */
-        }
-
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-primary: #121212;
-                --bg-sidebar: #252526;
-                --text-primary: #ffffff;
-                --text-secondary: #e0e0e0;
-                --border-color: #444444;
-                --active-item: #0d6efd;
-                --button-bg: #0d6efd;
-            }
-        }
-
-        body {
-            display: flex;
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
-            height: 100vh;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-        }
-
-        #sidebar {
-            width: 260px;
-            background: var(--bg-sidebar);
-            border-right: 1px solid(var(--border-color));
-            position: relative;
-            overflow: hidden;
-        }
-
-        #backButtonContainer {
-            padding: 8px 16px;
-            border-bottom: 1px solid(var(--border-color));
-            margin-bottom: 0px;
-        }
-
-        #sidebar canvas {
-            display: block;
-            touch-action: none; /* ← КРИТИЧЕСКИ ВАЖНО для сенсора */
-        }
-
-        #preview {
-            flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: #000;
-            position: relative;
-        }
-
-        #preview img {
-            max-width: 98vw;
-            max-height: 98vh;
-            object-fit: contain;
-        }
-
-        #preview .loading {
-            color: #aaa;
-            font-family: monospace;
-        }
-
-        #error {
-            color: #ff6b6b;
-            padding: 20px;
-            font-family: monospace;
-            display: none;
-        }
-
-        #mobileBurger {
-            display: none;
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            background: rgba(0, 0, 0, 0.5);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            width: 36px;
-            height: 36px;
-            font-size: 18px;
-            cursor: pointer;
-            z-index: 5;
-        }
-
-        body.mobile-mode #sidebar {
-            position: absolute;
-            z-index: 10;
-            height: 100vh;
-            transform: translateX(-100%);
-        }
-
-        body.mobile-mode #sidebar.visible {
-            transform: translateX(0);
-        }
-
-        body.mobile-mode #mobileBurger {
-            display: block;
-        }
-    </style>
+<meta charset="utf-8">
+<title>View</title>
+<style>
+:root {
+--bg-primary: #ffffff;
+--bg-sidebar: #f8f9fa;
+--text-primary: #000000;
+--text-secondary: #333333;
+--border-color: #cccccc;
+--active-item: #0d6efd;
+--button-bg: #007bff;
+--mobile-breakpoint: 768px;
+}
+@media (prefers-color-scheme: dark) {
+:root {
+--bg-primary: #121212;
+--bg-sidebar: #252526;
+--text-primary: #ffffff;
+--text-secondary: #e0e0e0;
+--border-color: #444444;
+--active-item: #0d6efd;
+--button-bg: #0d6efd;
+}
+}
+body {
+display: flex;
+margin: 0;
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
+height: 100vh;
+background: var(--bg-primary);
+color: var(--text-primary);
+}
+#sidebar {
+width: 260px;
+background: var(--bg-sidebar);
+border-right: 1px solid(var(--border-color));
+position: relative;
+overflow: hidden;
+}
+#backButtonContainer {
+padding: 8px 16px;
+border-bottom: 1px solid(var(--border-color));
+margin-bottom: 0px;
+}
+#sidebar canvas {
+display: block;
+touch-action: none;
+}
+#preview {
+flex: 1;
+display: flex;
+justify-content: center;
+align-items: center;
+background: #000;
+position: relative;
+}
+#preview img {
+max-width: 98vw;
+max-height: 98vh;
+object-fit: contain;
+}
+#preview .loading {
+color: #aaa;
+font-family: monospace;
+}
+#error {
+color: #ff6b6b;
+padding: 20px;
+font-family: monospace;
+display: none;
+}
+#mobileBurger {
+display: none;
+position: absolute;
+top: 12px;
+left: 12px;
+background: rgba(0, 0, 0, 0.5);
+color: white;
+border: none;
+border-radius: 4px;
+width: 36px;
+height: 36px;
+font-size: 18px;
+cursor: pointer;
+z-index: 5;
+}
+body.mobile-mode #sidebar {
+position: absolute;
+z-index: 10;
+height: 100vh;
+transform: translateX(-100%);
+}
+body.mobile-mode #sidebar.visible {
+transform: translateX(0);
+}
+body.mobile-mode #mobileBurger {
+display: block;
+}
+</style>
 </head>
 <body>
-
 <div id="sidebar">
-    <div id="backButtonContainer">
-        <button id="backBtn" style="
-            width: 100%;
-            padding: 6px 0;
-            background: var(--button-bg);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: normal;
-        ">← Back to Gallery</button>
-    </div>
-    <canvas id="sidebarCanvas"></canvas>
+<div id="backButtonContainer">
+<button id="backBtn" style="
+width: 100%;
+padding: 6px 0;
+background: var(--button-bg);
+color: white;
+border: none;
+border-radius: 4px;
+cursor: pointer;
+font-size: 13px;
+font-weight: normal;
+">← Back to Gallery</button>
+</div>
+<canvas id="sidebarCanvas"></canvas>
 </div>
 <div id="preview">
-    <button id="mobileBurger">≡</button>
-    <div class="loading">Loading...</div>
+<button id="mobileBurger">≡</button>
+<div class="loading">Loading...</div>
 </div>
 <div id="error"></div>
-
 <script>
+// === КОРРЕКТНОЕ КОДИРОВАНИЕ ПУТЕЙ В BASE64 (UTF-8 → Base64) ===
+function encodePathToB64(str) {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) =>
+        String.fromCharCode(parseInt(p1, 16))
+    ));
+}
+
+// === КОРРЕКТНОЕ ДЕКОДИРОВАНИЕ BASE64 → UTF-8 СТРОКА ===
+function decodeB64ToUtf8(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder('utf-8').decode(bytes);
+}
+
 // === UNIVERSAL MOBILE DETECTION ===
 function getMobileBreakpoint() {
     const style = getComputedStyle(document.documentElement);
@@ -146,7 +148,6 @@ function getMobileBreakpoint() {
     const num = parseFloat(value);
     return isNaN(num) ? 768 : num;
 }
-
 function isMobileDevice() {
     const hasTouch = 'ontouchstart' in window || (navigator.maxTouchPoints > 1);
     const mobileUA = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
@@ -155,14 +156,12 @@ function isMobileDevice() {
     const isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
     return hasTouch || mobileUA || isCoarse;
 }
-
 function isInMobileMode() {
     const breakpoint = getMobileBreakpoint();
     const isNarrow = window.innerWidth <= breakpoint;
     const isMobile = isMobileDevice();
     return isNarrow || isMobile;
 }
-
 function updateLayoutMode() {
     if (isInMobileMode()) {
         document.body.classList.add('mobile-mode');
@@ -171,42 +170,33 @@ function updateLayoutMode() {
         document.getElementById('sidebar').classList.add('visible');
     }
 }
-
-// Initialize layout
 updateLayoutMode();
 
-// === BURGER BUTTON ===
 document.getElementById('mobileBurger').addEventListener('click', () => {
     if (document.body.classList.contains('mobile-mode')) {
         document.getElementById('sidebar').classList.toggle('visible');
     }
 });
 
-// === CONFIGURATION ===
 const GAP_SIZE = 4;
 const SCROLLBAR_WIDTH = 16;
 const BUTTON_HEIGHT = 16;
 const SHOW_SCROLLBAR_BUTTONS = true;
 const SCROLL_INTERVAL_MS = 30;
 
-// === STATE ===
 let initialLoad = true;
 let currentFileListFull = [];
 let currentPayload = null;
 let selectedIndex = -1;
-
 let scrollTop = 0;
 let maxScroll = 0;
 let totalContentHeight = 0;
-
 let isDragging = false;
 let dragStartY = 0;
 let dragStartScrollTop = 0;
-
 let autoScrollDirection = 0;
 let autoScrollInterval = null;
 
-// === CANVAS ===
 const canvas = document.getElementById('sidebarCanvas');
 const ctx = canvas.getContext('2d');
 const lineHeight = 24;
@@ -221,7 +211,6 @@ function drawArrowUp(x, y, size, color) {
     ctx.closePath();
     ctx.fill();
 }
-
 function drawArrowDown(x, y, size, color) {
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -231,60 +220,47 @@ function drawArrowDown(x, y, size, color) {
     ctx.closePath();
     ctx.fill();
 }
-
 function updateMetrics() {
     const container = document.getElementById('sidebar');
     const topBarHeight = document.getElementById('backButtonContainer').offsetHeight;
     canvas.width = container.clientWidth;
     canvas.height = container.clientHeight - topBarHeight;
-
     totalContentHeight = currentFileListFull.length * (lineHeight + GAP_SIZE);
     const viewportHeight = canvas.height;
     maxScroll = Math.max(0, totalContentHeight - viewportHeight);
     scrollTop = Math.min(scrollTop, maxScroll);
 }
-
 function getScrollbarMetrics() {
     const h = canvas.height;
     const trackTop = SHOW_SCROLLBAR_BUTTONS ? BUTTON_HEIGHT : 0;
     const trackBottom = SHOW_SCROLLBAR_BUTTONS ? BUTTON_HEIGHT : 0;
     const trackHeight = h - trackTop - trackBottom;
-
     if (totalContentHeight <= canvas.height) {
         return { trackTop, trackHeight, thumbHeight: 0, thumbY: 0, h };
     }
-
     let thumbHeight = Math.max(20, (canvas.height / totalContentHeight) * trackHeight);
     const scrollableTrack = trackHeight - thumbHeight;
     const thumbY = trackTop + (scrollTop / maxScroll) * scrollableTrack;
-
     return { trackTop, trackHeight, thumbHeight, thumbY, h };
 }
-
 function renderSidebar() {
     const { width, height } = canvas;
     ctx.clearRect(0, 0, width, height);
-
     const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--bg-sidebar').trim();
     const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
     const activeBgColor = getComputedStyle(document.documentElement).getPropertyValue('--active-item').trim();
     const activeTextColor = '#ffffff';
-
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);
-
     const contentWidth = width - SCROLLBAR_WIDTH;
-
     if (totalContentHeight > 0) {
         const itemHeight = lineHeight + GAP_SIZE;
         const start = Math.floor(scrollTop / itemHeight);
         const visibleLines = Math.ceil(height / itemHeight) + 2;
         const end = Math.min(currentFileListFull.length, start + visibleLines);
-
         for (let i = start; i < end; i++) {
             const y = i * itemHeight - scrollTop;
             const filename = currentFileListFull[i].replace(/\\/g, '/').split('/').pop();
-
             if (i === selectedIndex) {
                 ctx.fillStyle = activeBgColor;
                 ctx.fillRect(0, y, contentWidth, lineHeight);
@@ -292,49 +268,39 @@ function renderSidebar() {
             } else {
                 ctx.fillStyle = textColor;
             }
-
             ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", monospace';
             ctx.textBaseline = 'middle';
             ctx.fillText(filename, paddingLeft, y + lineHeight / 2);
         }
     }
-
     if (totalContentHeight > height) {
         const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
-
         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
         ctx.fillRect(width - SCROLLBAR_WIDTH, trackTop, SCROLLBAR_WIDTH, trackHeight);
-
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(width - SCROLLBAR_WIDTH, 0);
         ctx.lineTo(width - SCROLLBAR_WIDTH, h);
         ctx.stroke();
-
         if (SHOW_SCROLLBAR_BUTTONS) {
             ctx.fillStyle = 'rgba(0,0,0,0.15)';
             ctx.fillRect(width - SCROLLBAR_WIDTH, 0, SCROLLBAR_WIDTH, BUTTON_HEIGHT);
             drawArrowUp(width - SCROLLBAR_WIDTH + 4, 4, 8, '#666');
-
             ctx.fillRect(width - SCROLLBAR_WIDTH, h - BUTTON_HEIGHT, SCROLLBAR_WIDTH, BUTTON_HEIGHT);
             drawArrowDown(width - SCROLLBAR_WIDTH + 4, h - BUTTON_HEIGHT + 2, 8, '#666');
         }
-
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.fillRect(width - SCROLLBAR_WIDTH, thumbY, SCROLLBAR_WIDTH, thumbHeight);
-
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.lineWidth = 1;
         ctx.strokeRect(width - SCROLLBAR_WIDTH, thumbY, SCROLLBAR_WIDTH, thumbHeight);
     }
 }
-
 function scrollToPosition(pos) {
     scrollTop = Math.max(0, Math.min(maxScroll, pos));
     renderSidebar();
 }
-
 function startAutoScroll(direction) {
     if (autoScrollInterval) return;
     autoScrollDirection = direction;
@@ -346,7 +312,6 @@ function startAutoScroll(direction) {
         }
     }, SCROLL_INTERVAL_MS);
 }
-
 function stopAutoScroll() {
     if (autoScrollInterval) {
         clearInterval(autoScrollInterval);
@@ -355,29 +320,22 @@ function stopAutoScroll() {
     }
 }
 
-// === MOUSE HANDLERS ===
 function handleMouseDown(event) {
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-
     const contentWidth = canvas.width - SCROLLBAR_WIDTH;
-
     if (x >= contentWidth && totalContentHeight > canvas.height) {
         event.preventDefault();
-
         const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
-
         if (SHOW_SCROLLBAR_BUTTONS && y < BUTTON_HEIGHT) {
             startAutoScroll(-1);
             return;
         }
-
         if (SHOW_SCROLLBAR_BUTTONS && y > h - BUTTON_HEIGHT) {
             startAutoScroll(1);
             return;
         }
-
         if (y >= thumbY && y <= thumbY + thumbHeight) {
             isDragging = true;
             dragStartY = y;
@@ -386,127 +344,95 @@ function handleMouseDown(event) {
         }
     }
 }
-
 function handleMouseUp(event) {
     stopAutoScroll();
     isDragging = false;
 }
-
 function handleMouseMove(event) {
     if (!isDragging || totalContentHeight <= canvas.height) return;
     const rect = canvas.getBoundingClientRect();
     const y = event.clientY - rect.top;
     const delta = y - dragStartY;
-
     const { trackTop, trackHeight, thumbHeight } = getScrollbarMetrics();
     const scrollableTrack = trackHeight - thumbHeight;
     if (scrollableTrack <= 0) return;
-
     const ratio = delta / scrollableTrack;
     const newScroll = dragStartScrollTop + ratio * maxScroll;
     scrollToPosition(newScroll);
 }
-
 function handleCanvasClick(event) {
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-
     const contentWidth = canvas.width - SCROLLBAR_WIDTH;
-
     if (x < contentWidth) {
         const index = Math.floor((y + scrollTop) / (lineHeight + GAP_SIZE));
         if (index >= 0 && index < currentFileListFull.length) {
             selectedIndex = index;
             renderSidebar();
             switchToImageByPath(currentFileListFull[index]);
-
             if (document.body.classList.contains('mobile-mode')) {
                 document.getElementById('sidebar').classList.remove('visible');
             }
         }
         return;
     }
-
     if (totalContentHeight <= canvas.height) return;
-
     const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
-
     if (SHOW_SCROLLBAR_BUTTONS && (y < BUTTON_HEIGHT || y > h - BUTTON_HEIGHT)) return;
     if (y >= thumbY && y <= thumbY + thumbHeight) return;
-
     const scrollableTrack = trackHeight - thumbHeight;
     if (scrollableTrack <= 0) return;
-
     const clickRatio = (y - trackTop - (y < thumbY ? 0 : thumbHeight)) / scrollableTrack;
     const targetScroll = Math.max(0, Math.min(maxScroll, clickRatio * maxScroll));
     scrollToPosition(targetScroll);
 }
 
-// === TOUCH HANDLERS (FULL SUPPORT) ===
 let touchStartY = 0;
 let touchStartScrollTop = 0;
 let isTrackingTouch = false;
-
 function handleTouchStart(event) {
     if (event.touches.length !== 1) return;
-    
     const touch = event.touches[0];
     const rect = canvas.getBoundingClientRect();
     const x = touch.clientX - rect.left;
     const contentWidth = canvas.width - SCROLLBAR_WIDTH;
-
-    // Если касание в области scrollbar'а — обрабатываем как раньше
     if (x >= contentWidth && totalContentHeight > canvas.height) {
         event.preventDefault();
         const fakeEvent = { clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => {} };
         handleMouseDown(fakeEvent);
         return;
     }
-
-    // Начинаем отслеживать свайп по списку
     touchStartY = touch.clientY;
     touchStartScrollTop = scrollTop;
     isTrackingTouch = true;
 }
-
 function handleTouchMove(event) {
     if (!isTrackingTouch || event.touches.length !== 1 || totalContentHeight <= canvas.height) return;
-
     const touch = event.touches[0];
     const deltaY = touch.clientY - touchStartY;
     const newScroll = touchStartScrollTop - deltaY;
-
-    event.preventDefault(); // блокируем скролл страницы
+    event.preventDefault();
     scrollToPosition(newScroll);
 }
-
 function handleTouchEnd(event) {
     isTrackingTouch = false;
-    handleMouseUp(event); // завершаем drag scrollbar'а, если был
-
+    handleMouseUp(event);
     if (event.changedTouches.length === 0) return;
     const touch = event.changedTouches[0];
-
     const rect = canvas.getBoundingClientRect();
     const x = touch.clientX - rect.left;
     const y = touch.clientY - rect.top;
     const contentWidth = canvas.width - SCROLLBAR_WIDTH;
-
-    // Игнорируем клик, если касание было на scrollbar'е
     if (x >= contentWidth) return;
-
-    // Определяем: тап или свайп?
     const deltaY = Math.abs(touch.clientY - touchStartY);
-    const isTap = deltaY < 8; // порог в пикселях
-
+    const isTap = deltaY < 8;
     if (isTap) {
         const index = Math.floor((y + scrollTop) / (lineHeight + GAP_SIZE));
         if (index >= 0 && index < currentFileListFull.length) {
             selectedIndex = index;
             renderSidebar();
             switchToImageByPath(currentFileListFull[index]);
-
             if (document.body.classList.contains('mobile-mode')) {
                 document.getElementById('sidebar').classList.remove('visible');
             }
@@ -514,69 +440,50 @@ function handleTouchEnd(event) {
     }
 }
 
-// === EVENT LISTENERS ===
-// Mouse
 canvas.addEventListener('mousedown', handleMouseDown);
 canvas.addEventListener('click', handleCanvasClick);
 window.addEventListener('mousemove', handleMouseMove);
 window.addEventListener('mouseup', handleMouseUp);
-
-// Touch
 canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
 canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
 canvas.addEventListener('touchend', handleTouchEnd, { passive: true });
-
-// Prevent context menu on long press
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
-// Wheel
 function onWheel(e) {
     if (totalContentHeight <= canvas.height) return;
     scrollToPosition(scrollTop + e.deltaY);
     e.preventDefault();
 }
 canvas.addEventListener('wheel', onWheel, { passive: false });
-
-// Resize
 window.addEventListener('resize', () => {
     updateLayoutMode();
     updateMetrics();
     renderSidebar();
 });
 
-// === UTILS ===
 function showError(msg) {
     document.getElementById('error').textContent = msg;
     document.getElementById('error').style.display = 'block';
     document.querySelector('#preview .loading').style.display = 'none';
 }
-
 function hideError() {
     document.getElementById('error').style.display = 'none';
 }
-
-function encodePathToImageURL(fullPath) {
-    const b64 = btoa(unescape(encodeURIComponent(fullPath)));
-    return `/image/${b64}?t=${Date.now()}`;
-}
-
 function showImageImmediately(fullPath) {
     const preview = document.getElementById('preview');
     preview.innerHTML = '<button id="mobileBurger">≡</button>';
     const img = document.createElement('img');
-    img.src = encodePathToImageURL(fullPath);
+    const b64Path = encodePathToB64(fullPath);
+    img.src = `/image/${b64Path}?t=${Date.now()}`;
     img.alt = fullPath;
     img.title = fullPath;
     document.title = `View: ${fullPath.replace(/\\/g, '/').split('/').pop()}`;
     preview.appendChild(img);
-
     document.getElementById('mobileBurger').addEventListener('click', () => {
         if (document.body.classList.contains('mobile-mode')) {
             document.getElementById('sidebar').classList.toggle('visible');
         }
     });
 }
-
 async function loadMetadataAndSidebar(b64Payload) {
     try {
         const res = await fetch(`/api/view?data=${encodeURIComponent(b64Payload)}`);
@@ -585,18 +492,16 @@ async function loadMetadataAndSidebar(b64Payload) {
             throw new Error(err.error || `HTTP ${res.status}`);
         }
         const data = await res.json();
-
         currentFileListFull = data.file_list_full;
-        currentPayload = JSON.parse(atob(data.encoded_data));
-
+        // Декодируем payload на стороне клиента правильно
+        const jsonString = decodeB64ToUtf8(data.encoded_data);
+        currentPayload = JSON.parse(jsonString);
         selectedIndex = currentFileListFull.findIndex(fp =>
             fp.toLowerCase() === data.full_path.toLowerCase()
         );
         if (selectedIndex === -1) selectedIndex = 0;
-
         updateMetrics();
         renderSidebar();
-
         const { folder, regex, save } = currentPayload;
         const url = new URL('/', window.location.origin);
         if (folder) url.searchParams.set('path', folder);
@@ -605,57 +510,45 @@ async function loadMetadataAndSidebar(b64Payload) {
         document.getElementById('backBtn').onclick = () => {
             window.location.href = url.toString();
         };
-
     } catch (err) {
         console.warn("Metadata load failed:", err.message);
     }
 }
-
 function switchToImageByPath(fullPath) {
     const newPayload = { ...currentPayload, full_path: fullPath };
-    const newB64 = btoa(unescape(encodeURIComponent(JSON.stringify(newPayload))));
+    const newB64 = encodePathToB64(JSON.stringify(newPayload));
     history.pushState(null, '', `/view/${newB64}`);
-
     selectedIndex = currentFileListFull.findIndex(fp =>
         fp.toLowerCase() === fullPath.toLowerCase()
     );
     if (selectedIndex === -1) selectedIndex = 0;
-
     renderSidebar();
     showImageImmediately(fullPath);
-
     if (document.body.classList.contains('mobile-mode')) {
         document.getElementById('sidebar').classList.remove('visible');
     }
 }
 
-// === INIT ===
 (async () => {
     const urlParts = window.location.pathname.split('/');
     const b64Data = urlParts[urlParts.length - 1];
-
     if (!b64Data) {
         showError("No view data in URL");
         return;
     }
-
     try {
-        const decoded = JSON.parse(atob(b64Data));
+        const jsonString = decodeB64ToUtf8(b64Data);
+        const decoded = JSON.parse(jsonString);
         const fullPath = decoded.full_path;
         if (!fullPath) throw new Error("full_path missing");
-
         currentPayload = decoded;
-
         await showImageImmediately(fullPath);
         await loadMetadataAndSidebar(b64Data);
-
         initialLoad = false;
-
     } catch (err) {
         showError("Initial load failed: " + err.message);
     }
 })();
-
 window.addEventListener('popstate', () => {
     const urlParts = window.location.pathname.split('/');
     const b64Data = urlParts[urlParts.length - 1];
@@ -664,6 +557,5 @@ window.addEventListener('popstate', () => {
     }
 });
 </script>
-
 </body>
 </html>

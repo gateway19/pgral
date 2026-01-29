@@ -1,205 +1,184 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>Photo Gallery</title>
-    <style>
-        :root {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f9f9f9;
-            --bg-sidebar: #f8f9fa;
-            --text-primary: #000000;
-            --text-secondary: #333333;
-            --border-color: #cccccc;
-            --button-bg: #007bff;
-            --button-hover: #0069d9;
-            --save-button-normal: #007bff;
-            --save-button-save: #dc3545; /* красный */
-            --thumb-shadow: rgba(0,0,0,0.1);
-            --thumb-shadow-hover: rgba(0,0,0,0.15);
-            --active-item: #0d6efd;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-primary: #121212;
-                --bg-secondary: #1e1e1e;
-                --bg-sidebar: #252526;
-                --text-primary: #ffffff;
-                --text-secondary: #e0e0e0;
-                --border-color: #444444;
-                --button-bg: #0d6efd;
-                --button-hover: #0b5ed7;
-                --save-button-normal: #0d6efd;
-                --save-button-save: #ff6b6b;
-                --thumb-shadow: rgba(0,0,0,0.3);
-                --thumb-shadow-hover: rgba(0,0,0,0.4);
-                --active-item: #0d6efd;
-            }
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-            margin: 0;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-        }
+<meta charset="utf-8">
+<title>Photo Gallery</title>
+<style>
+:root {
+--bg-primary: #ffffff;
+--bg-secondary: #f9f9f9;
+--bg-sidebar: #f8f9fa;
+--text-primary: #000000;
+--text-secondary: #333333;
+--border-color: #cccccc;
+--button-bg: #007bff;
+--button-hover: #0069d9;
+--save-button-normal: #007bff;
+--save-button-save: #dc3545;
+--thumb-shadow: rgba(0,0,0,0.1);
+--thumb-shadow-hover: rgba(0,0,0,0.15);
+--active-item: #0d6efd;
+}
+@media (prefers-color-scheme: dark) {
+:root {
+--bg-primary: #121212;
+--bg-secondary: #1e1e1e;
+--bg-sidebar: #252526;
+--text-primary: #ffffff;
+--text-secondary: #e0e0e0;
+--border-color: #444444;
+--button-bg: #0d6efd;
+--button-hover: #0b5ed7;
+--save-button-normal: #0d6efd;
+--save-button-save: #ff6b6b;
+--thumb-shadow: rgba(0,0,0,0.3);
+--thumb-shadow-hover: rgba(0,0,0,0.4);
+--active-item: #0d6efd;
+}
+}
+body {
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+margin: 0;
+background: var(--bg-primary);
+color: var(--text-primary);
+}
 #mode-toggle-bar {
-    padding: 8px 20px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-    text-align: left; /* ← ключевое: слева */
+padding: 8px 20px;
+background: var(--bg-secondary);
+border-bottom: 1px solid var(--border-color);
+text-align: left;
 }
-
 #toggleSaveMode {
-    margin: 0;
-    padding: 6px 16px;
-    background: var(--save-button-normal);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 14px;
+margin: 0;
+padding: 6px 16px;
+background: var(--save-button-normal);
+color: white;
+border: none;
+border-radius: 4px;
+font-weight: bold;
+cursor: pointer;
+font-size: 14px;
 }
-
-        #controls {
-            padding: 20px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        label {
-            display: block;
-            margin: 8px 0 4px;
-            font-weight: bold;
-            color: var(--text-secondary);
-        }
-
-        input[type="text"], input[type="number"] {
-            padding: 8px;
-            font-family: monospace;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            width: 100%;
-            max-width: 500px;
-        }
-
-        button:not(#toggleSaveMode) {
-            margin-top: 10px;
-            padding: 8px 16px;
-            background: var(--button-bg);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        button:not(#toggleSaveMode):hover:not(:disabled) {
-            background: var(--button-hover);
-        }
-
-        button:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-        }
-
-        #grid-controls {
-            margin-top: 15px;
-        }
-
-        .gallery-grid {
-            display: grid;
-            gap: 12px;
-            padding: 20px;
-            grid-template-columns: repeat(4, 1fr);
-        }
-
-        .thumb {
-            border-radius: 6px;
-            overflow: hidden;
-            box-shadow: 0 2px 6px var(--thumb-shadow);
-            transition: transform 0.2s, box-shadow 0.2s;
-            background: var(--bg-primary);
-            position: relative;
-        }
-
-        .thumb:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px var(--thumb-shadow-hover);
-        }
-
-        .thumb img {
-            width: 100%;
-            height: auto;
-            display: block;
-            object-fit: contain;
-        }
-
-        .thumb-link {
-            text-decoration: none;
-            color: inherit;
-            display: block;
-            height: 100%;
-        }
-
-        #load-more-container {
-            text-align: center;
-            padding: 20px;
-            display: none;
-        }
-
-        #loadMoreBtn {
-            padding: 10px 24px;
-            font-size: 16px;
-        }
-    </style>
+#controls {
+padding: 20px;
+background: var(--bg-secondary);
+border-bottom: 1px solid var(--border-color);
+}
+label {
+display: block;
+margin: 8px 0 4px;
+font-weight: bold;
+color: var(--text-secondary);
+}
+input[type="text"], input[type="number"] {
+padding: 8px;
+font-family: monospace;
+border: 1px solid(var(--border-color));
+border-radius: 4px;
+background: var(--bg-primary);
+color: var(--text-primary);
+width: 100%;
+max-width: 500px;
+}
+button:not(#toggleSaveMode) {
+margin-top: 10px;
+padding: 8px 16px;
+background: var(--button-bg);
+color: white;
+border: none;
+border-radius: 4px;
+cursor: pointer;
+font-weight: bold;
+}
+button:not(#toggleSaveMode):hover:not(:disabled) {
+background: var(--button-hover);
+}
+button:disabled {
+background: #6c757d;
+cursor: not-allowed;
+}
+#grid-controls {
+margin-top: 15px;
+}
+.gallery-grid {
+display: grid;
+gap: 12px;
+padding: 20px;
+grid-template-columns: repeat(4, 1fr);
+}
+.thumb {
+border-radius: 6px;
+overflow: hidden;
+box-shadow: 0 2px 6px var(--thumb-shadow);
+transition: transform 0.2s, box-shadow 0.2s;
+background: var(--bg-primary);
+position: relative;
+}
+.thumb:hover {
+transform: translateY(-2px);
+box-shadow: 0 4px 12px var(--thumb-shadow-hover);
+}
+.thumb img {
+width: 100%;
+height: auto;
+display: block;
+object-fit: contain;
+}
+.thumb-link {
+text-decoration: none;
+color: inherit;
+display: block;
+height: 100%;
+}
+#load-more-container {
+text-align: center;
+padding: 20px;
+display: none;
+}
+#loadMoreBtn {
+padding: 10px 24px;
+font-size: 16px;
+}
+</style>
 </head>
 <body>
-
-<!-- Кнопка переключения режима — В САМОМ ВЕРХУ -->
 <div id="mode-toggle-bar">
-    <button id="toggleSaveMode">
-        {{ 'Exit Save Mode' if save_mode else 'Enter Save Mode' }}
-    </button>
+<button id="toggleSaveMode">
+{{ 'Exit Save Mode' if save_mode else 'Enter Save Mode' }}
+</button>
 </div>
-
 <div id="controls">
-    <form id="filterForm">
-        <label for="folder">Folder path:</label>
-        <input type="text" id="folder" name="folder" value="{{ default_folder }}" required>
-
-        <label for="regex">
-            Regex (optional):
-            <a href="/regexcheck" target="_blank" style="font-size:12px; margin-left:8px; color:#007bff; text-decoration:underline;">Помощь</a>
-        </label>
-        <input type="text" id="regex" name="regex" value="{{ default_regex }}">
-
-        <label for="startIndex">Start index (optional):</label>
-        <input type="number" id="startIndex" name="index" min="0" value="{{ request.query_params.get('index', '0') }}" placeholder="0">
-
-        <button type="submit">Apply Filter</button>
-    </form>
-
-    <div id="grid-controls">
-        <label>
-            Grid columns: 
-            <input type="range" id="cols" min="1" max="10" value="4" style="width: 100px; vertical-align: middle;">
-            <span id="col-value">4</span>
-        </label>
-    </div>
+<form id="filterForm">
+<label for="folder">Folder path:</label>
+<input type="text" id="folder" name="folder" value="{{ default_folder }}" required>
+<label for="regex">
+Regex (optional):
+<a href="/regexcheck" target="_blank" style="font-size:12px; margin-left:8px; color:#007bff; text-decoration:underline;">Помощь</a>
+</label>
+<input type="text" id="regex" name="regex" value="{{ default_regex }}">
+<label for="startIndex">Start index (optional):</label>
+<input type="number" id="startIndex" name="index" min="0" value="{{ request.query_params.get('index', '0') }}" placeholder="0">
+<button type="submit">Apply Filter</button>
+</form>
+<div id="grid-controls">
+<label>
+Grid columns:
+<input type="range" id="cols" min="1" max="10" value="4" style="width: 100px; vertical-align: middle;">
+<span id="col-value">4</span>
+</label>
 </div>
-
+</div>
 <div id="gallery" class="gallery-grid"></div>
-
 <div id="load-more-container">
-    <button id="loadMoreBtn">Load more</button>
+<button id="loadMoreBtn">Load more</button>
 </div>
-
 <script>
+function encodePathToB64(str) {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) =>
+        String.fromCharCode(parseInt(p1, 16))
+    ));
+}
+
 let currentParams = null;
 let currentOffset = 0;
 let hasMore = true;
@@ -208,7 +187,6 @@ let wheelListener = null;
 let saveMode = {{ 'true' if save_mode else 'false' }};
 let savedFiles = new Set();
 
-// Установка цвета кнопки
 function updateToggleButton() {
     const btn = document.getElementById('toggleSaveMode');
     if (saveMode) {
@@ -249,11 +227,9 @@ async function applyFilters(folder, regex, startIndex = 0) {
     isLoading = false;
     document.getElementById('gallery').innerHTML = '';
     document.getElementById('load-more-container').style.display = 'none';
-    
     document.getElementById('folder').value = folder;
     document.getElementById('regex').value = regex;
     document.getElementById('startIndex').value = startIndex;
-
     await loadBatch(currentOffset);
     if (saveMode) {
         await loadSavedFiles();
@@ -262,21 +238,17 @@ async function applyFilters(folder, regex, startIndex = 0) {
 
 async function loadBatch(offset) {
     if (isLoading || !hasMore) return;
-    
     isLoading = true;
     const btn = document.getElementById('loadMoreBtn');
     if (btn) btn.disabled = true;
-
     const formData = new FormData();
     formData.append('folder', currentParams.folder);
     formData.append('regex', currentParams.regex);
     formData.append('offset', offset);
     formData.append('limit', 150);
-
     try {
         const res = await fetch('/api/filter-paged', { method: 'POST', body: formData });
         const data = await res.json();
-
         if (data.error) {
             alert('Error: ' + data.error);
             hasMore = false;
@@ -292,7 +264,6 @@ async function loadBatch(offset) {
         alert('Network error: ' + err.message);
         hasMore = false;
     }
-
     isLoading = false;
     if (btn) btn.disabled = false;
     updateLoadMoreButton();
@@ -302,36 +273,31 @@ function appendThumbs(files) {
     const gallery = document.getElementById('gallery');
     files.forEach(fullPath => {
         const filename = fullPath.replace(/\\/g, '/').split('/').pop();
-        const b64Path = btoa(unescape(encodeURIComponent(fullPath)));
-
+        const b64Path = encodePathToB64(fullPath);
         const viewPayload = {
             folder: currentParams.folder,
             regex: currentParams.regex,
             full_path: fullPath,
             save: saveMode
         };
-        const viewB64 = btoa(unescape(encodeURIComponent(JSON.stringify(viewPayload))));
+        const viewB64 = encodePathToB64(JSON.stringify(viewPayload));
         const viewUrl = `/view/${viewB64}`;
-
         const link = document.createElement('a');
         link.href = viewUrl;
         link.className = 'thumb-link';
         if (saveMode) {
             link.dataset.fullPath = fullPath;
         }
-
         const img = document.createElement('img');
         img.src = `/preview/${b64Path}`;
         img.alt = filename;
         img.title = filename;
         img.loading = 'lazy';
-
         const div = document.createElement('div');
         div.className = 'thumb';
         if (saveMode) {
             div.dataset.fullPath = fullPath;
         }
-
         div.appendChild(link);
         link.appendChild(img);
         gallery.appendChild(div);
@@ -416,7 +382,6 @@ document.getElementById('cols').addEventListener('input', function() {
     document.getElementById('gallery').style.gridTemplateColumns = `repeat(${val}, 1fr)`;
 });
 
-// === ПЕРЕКЛЮЧЕНИЕ РЕЖИМА ===
 document.getElementById('toggleSaveMode').addEventListener('click', function() {
     const url = new URL(window.location.href);
     if (saveMode) {
@@ -428,7 +393,7 @@ document.getElementById('toggleSaveMode').addEventListener('click', function() {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    updateToggleButton(); // Установить начальный цвет
+    updateToggleButton();
     const urlParams = getUrlParams();
     if (urlParams.path) {
         applyFilters(urlParams.path, urlParams.regex || '', urlParams.index);
@@ -438,7 +403,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 let atBottom = false;
-
 function checkIfAtBottom() {
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const scrollHeight = document.documentElement.scrollHeight;
@@ -456,7 +420,6 @@ function handleWheelAtBottom(event) {
 window.addEventListener('scroll', () => {
     const wasAtBottom = atBottom;
     atBottom = checkIfAtBottom();
-
     if (atBottom && !wasAtBottom && hasMore && !isLoading) {
         if (!wheelListener) {
             wheelListener = handleWheelAtBottom;
@@ -470,6 +433,5 @@ window.addEventListener('scroll', () => {
     }
 });
 </script>
-
 </body>
 </html>
