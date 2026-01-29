@@ -13,6 +13,8 @@
             --border-color: #cccccc;
             --button-bg: #007bff;
             --button-hover: #0069d9;
+            --save-button-normal: #007bff;
+            --save-button-save: #dc3545; /* красный */
             --thumb-shadow: rgba(0,0,0,0.1);
             --thumb-shadow-hover: rgba(0,0,0,0.15);
             --active-item: #0d6efd;
@@ -28,6 +30,8 @@
                 --border-color: #444444;
                 --button-bg: #0d6efd;
                 --button-hover: #0b5ed7;
+                --save-button-normal: #0d6efd;
+                --save-button-save: #ff6b6b;
                 --thumb-shadow: rgba(0,0,0,0.3);
                 --thumb-shadow-hover: rgba(0,0,0,0.4);
                 --active-item: #0d6efd;
@@ -40,6 +44,24 @@
             background: var(--bg-primary);
             color: var(--text-primary);
         }
+#mode-toggle-bar {
+    padding: 8px 20px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    text-align: left; /* ← ключевое: слева */
+}
+
+#toggleSaveMode {
+    margin: 0;
+    padding: 6px 16px;
+    background: var(--save-button-normal);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+}
 
         #controls {
             padding: 20px;
@@ -65,7 +87,7 @@
             max-width: 500px;
         }
 
-        button {
+        button:not(#toggleSaveMode) {
             margin-top: 10px;
             padding: 8px 16px;
             background: var(--button-bg);
@@ -76,7 +98,7 @@
             font-weight: bold;
         }
 
-        button:hover:not(:disabled) {
+        button:not(#toggleSaveMode):hover:not(:disabled) {
             background: var(--button-hover);
         }
 
@@ -138,6 +160,13 @@
 </head>
 <body>
 
+<!-- Кнопка переключения режима — В САМОМ ВЕРХУ -->
+<div id="mode-toggle-bar">
+    <button id="toggleSaveMode">
+        {{ 'Exit Save Mode' if save_mode else 'Enter Save Mode' }}
+    </button>
+</div>
+
 <div id="controls">
     <form id="filterForm">
         <label for="folder">Folder path:</label>
@@ -150,7 +179,7 @@
         <input type="text" id="regex" name="regex" value="{{ default_regex }}">
 
         <label for="startIndex">Start index (optional):</label>
-        <input type="number" id="startIndex" name="index" min="0" value="0" placeholder="0">
+        <input type="number" id="startIndex" name="index" min="0" value="{{ request.query_params.get('index', '0') }}" placeholder="0">
 
         <button type="submit">Apply Filter</button>
     </form>
@@ -178,6 +207,18 @@ let isLoading = false;
 let wheelListener = null;
 let saveMode = {{ 'true' if save_mode else 'false' }};
 let savedFiles = new Set();
+
+// Установка цвета кнопки
+function updateToggleButton() {
+    const btn = document.getElementById('toggleSaveMode');
+    if (saveMode) {
+        btn.textContent = 'Exit Save Mode';
+        btn.style.backgroundColor = 'var(--save-button-save)';
+    } else {
+        btn.textContent = 'Enter Save Mode';
+        btn.style.backgroundColor = 'var(--save-button-normal)';
+    }
+}
 
 async function loadSavedFiles() {
     if (!saveMode) return;
@@ -263,13 +304,11 @@ function appendThumbs(files) {
         const filename = fullPath.replace(/\\/g, '/').split('/').pop();
         const b64Path = btoa(unescape(encodeURIComponent(fullPath)));
 
-        // === ИЗМЕНЕНО: передаём full_path вместо filename ===
         const viewPayload = {
             folder: currentParams.folder,
             regex: currentParams.regex,
             full_path: fullPath,
-            save: saveMode  // ← добавлено
-
+            save: saveMode
         };
         const viewB64 = btoa(unescape(encodeURIComponent(JSON.stringify(viewPayload))));
         const viewUrl = `/view/${viewB64}`;
@@ -377,7 +416,19 @@ document.getElementById('cols').addEventListener('input', function() {
     document.getElementById('gallery').style.gridTemplateColumns = `repeat(${val}, 1fr)`;
 });
 
+// === ПЕРЕКЛЮЧЕНИЕ РЕЖИМА ===
+document.getElementById('toggleSaveMode').addEventListener('click', function() {
+    const url = new URL(window.location.href);
+    if (saveMode) {
+        url.searchParams.delete('save');
+    } else {
+        url.searchParams.set('save', 'true');
+    }
+    window.location.href = url.toString();
+});
+
 document.addEventListener('DOMContentLoaded', () => {
+    updateToggleButton(); // Установить начальный цвет
     const urlParams = getUrlParams();
     if (urlParams.path) {
         applyFilters(urlParams.path, urlParams.regex || '', urlParams.index);
