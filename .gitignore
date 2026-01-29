@@ -10,9 +10,9 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/*
+dist/
 
-
+build.bat
 results/*
 
 downloads/

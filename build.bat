@@ -1,1 +1,0 @@
-pyinstaller --onefile --add-data "templates;templates" --name pgral --hidden-import=uvicorn.protocols.http.h11_impl --hidden-import=uvicorn.protocols.websockets.websockets_impl main.py 
