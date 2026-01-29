@@ -37,29 +37,20 @@
 
         #sidebar {
             width: 260px;
-            padding: 0;
             background: var(--bg-sidebar);
-            overflow-y: auto;
             border-right: 1px solid var(--border-color);
-        }
-
-        #sidebar > div:not(:first-child) {
-            padding: 8px 16px;
-            cursor: pointer;
-            white-space: nowrap;
+            position: relative;
             overflow: hidden;
-            text-overflow: ellipsis;
-            font-size: 14px;
-            color: var(--text-secondary);
         }
 
-        #sidebar > div:not(:first-child):hover {
-            background: rgba(0,0,0,0.1);
+        #backButtonContainer {
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 0px;
         }
 
-        #sidebar > div.active {
-            background: var(--active-item);
-            color: white;
+        #sidebar canvas {
+            display: block;
         }
 
         #preview {
@@ -92,7 +83,7 @@
 <body>
 
 <div id="sidebar">
-    <div style="padding: 8px 16px; border-bottom: 1px solid var(--border-color); margin-bottom: 8px;">
+    <div id="backButtonContainer">
         <button id="backBtn" style="
             width: 100%;
             padding: 6px 0;
@@ -105,6 +96,7 @@
             font-weight: normal;
         ">← Back to Gallery</button>
     </div>
+    <canvas id="sidebarCanvas"></canvas>
 </div>
 <div id="preview">
     <div class="loading">Loading...</div>
@@ -112,10 +104,297 @@
 <div id="error"></div>
 
 <script>
+// === CONFIGURATION ===
+const GAP_SIZE = 4;
+const SCROLLBAR_WIDTH = 16;
+const BUTTON_HEIGHT = 16;
+const SHOW_SCROLLBAR_BUTTONS = true;
+const SCROLL_INTERVAL_MS = 30; // ~33 FPS
+
+// === STATE ===
 let initialLoad = true;
 let currentFileListFull = [];
 let currentPayload = null;
+let selectedIndex = -1;
 
+let scrollTop = 0;
+let maxScroll = 0;
+let totalContentHeight = 0;
+
+let isDragging = false;
+let dragStartY = 0;
+let dragStartScrollTop = 0;
+
+let autoScrollDirection = 0; // -1 = up, 1 = down
+let autoScrollInterval = null;
+
+// === CANVAS ===
+const canvas = document.getElementById('sidebarCanvas');
+const ctx = canvas.getContext('2d');
+const lineHeight = 24;
+const paddingLeft = 16;
+
+function drawArrowUp(x, y, size, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y + size);
+    ctx.lineTo(x + size / 2, y);
+    ctx.lineTo(x + size, y + size);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawArrowDown(x, y, size, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + size / 2, y + size);
+    ctx.lineTo(x + size, y);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function updateMetrics() {
+    const container = document.getElementById('sidebar');
+    const topBarHeight = document.getElementById('backButtonContainer').offsetHeight;
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight - topBarHeight;
+
+    totalContentHeight = currentFileListFull.length * (lineHeight + GAP_SIZE);
+    const viewportHeight = canvas.height;
+    maxScroll = Math.max(0, totalContentHeight - viewportHeight);
+    scrollTop = Math.min(scrollTop, maxScroll);
+}
+
+function getScrollbarMetrics() {
+    const h = canvas.height;
+    const trackTop = SHOW_SCROLLBAR_BUTTONS ? BUTTON_HEIGHT : 0;
+    const trackBottom = SHOW_SCROLLBAR_BUTTONS ? BUTTON_HEIGHT : 0;
+    const trackHeight = h - trackTop - trackBottom;
+
+    if (totalContentHeight <= canvas.height) {
+        return { trackTop, trackHeight, thumbHeight: 0, thumbY: 0, h };
+    }
+
+    let thumbHeight = Math.max(20, (canvas.height / totalContentHeight) * trackHeight);
+    const scrollableTrack = trackHeight - thumbHeight;
+    const thumbY = trackTop + (scrollTop / maxScroll) * scrollableTrack;
+
+    return { trackTop, trackHeight, thumbHeight, thumbY, h };
+}
+
+function renderSidebar() {
+    const { width, height } = canvas;
+    ctx.clearRect(0, 0, width, height);
+
+    const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--bg-sidebar').trim();
+    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+    const activeBgColor = getComputedStyle(document.documentElement).getPropertyValue('--active-item').trim();
+    const activeTextColor = '#ffffff';
+
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, width, height);
+
+    const contentWidth = width - SCROLLBAR_WIDTH;
+
+    if (totalContentHeight > 0) {
+        const itemHeight = lineHeight + GAP_SIZE;
+        const start = Math.floor(scrollTop / itemHeight);
+        const visibleLines = Math.ceil(height / itemHeight) + 2;
+        const end = Math.min(currentFileListFull.length, start + visibleLines);
+
+        for (let i = start; i < end; i++) {
+            const y = i * itemHeight - scrollTop;
+            const filename = currentFileListFull[i].replace(/\\/g, '/').split('/').pop();
+
+            if (i === selectedIndex) {
+                ctx.fillStyle = activeBgColor;
+                ctx.fillRect(0, y, contentWidth, lineHeight);
+                ctx.fillStyle = activeTextColor;
+            } else {
+                ctx.fillStyle = textColor;
+            }
+
+            ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", monospace';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(filename, paddingLeft, y + lineHeight / 2);
+        }
+    }
+
+    // === Scrollbar ===
+    if (totalContentHeight > height) {
+        const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
+
+        // Track
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillRect(width - SCROLLBAR_WIDTH, trackTop, SCROLLBAR_WIDTH, trackHeight);
+
+        // Left border
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(width - SCROLLBAR_WIDTH, 0);
+        ctx.lineTo(width - SCROLLBAR_WIDTH, h);
+        ctx.stroke();
+
+        // Buttons
+        if (SHOW_SCROLLBAR_BUTTONS) {
+            ctx.fillStyle = 'rgba(0,0,0,0.15)';
+            ctx.fillRect(width - SCROLLBAR_WIDTH, 0, SCROLLBAR_WIDTH, BUTTON_HEIGHT);
+            drawArrowUp(width - SCROLLBAR_WIDTH + 4, 4, 8, '#666');
+
+            ctx.fillRect(width - SCROLLBAR_WIDTH, h - BUTTON_HEIGHT, SCROLLBAR_WIDTH, BUTTON_HEIGHT);
+            drawArrowDown(width - SCROLLBAR_WIDTH + 4, h - BUTTON_HEIGHT + 2, 8, '#666');
+        }
+
+        // Thumb
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(width - SCROLLBAR_WIDTH, thumbY, SCROLLBAR_WIDTH, thumbHeight);
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(width - SCROLLBAR_WIDTH, thumbY, SCROLLBAR_WIDTH, thumbHeight);
+    }
+}
+
+function scrollToPosition(pos) {
+    scrollTop = Math.max(0, Math.min(maxScroll, pos));
+    renderSidebar();
+}
+
+function startAutoScroll(direction) {
+    if (autoScrollInterval) return;
+    autoScrollDirection = direction;
+    autoScrollInterval = setInterval(() => {
+        if (autoScrollDirection === -1) {
+            scrollToPosition(scrollTop - (lineHeight + GAP_SIZE));
+        } else if (autoScrollDirection === 1) {
+            scrollToPosition(scrollTop + (lineHeight + GAP_SIZE));
+        }
+    }, SCROLL_INTERVAL_MS);
+}
+
+function stopAutoScroll() {
+    if (autoScrollInterval) {
+        clearInterval(autoScrollInterval);
+        autoScrollInterval = null;
+        autoScrollDirection = 0;
+    }
+}
+
+// === MOUSE HANDLERS ===
+function handleMouseDown(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const contentWidth = canvas.width - SCROLLBAR_WIDTH;
+
+    // Ignore list area mousedown (we only care about scrollbar)
+    if (x >= contentWidth && totalContentHeight > canvas.height) {
+        event.preventDefault();
+
+        const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
+
+        // Up button
+        if (SHOW_SCROLLBAR_BUTTONS && y < BUTTON_HEIGHT) {
+            startAutoScroll(-1);
+            return;
+        }
+
+        // Down button
+        if (SHOW_SCROLLBAR_BUTTONS && y > h - BUTTON_HEIGHT) {
+            startAutoScroll(1);
+            return;
+        }
+
+        // Thumb
+        if (y >= thumbY && y <= thumbY + thumbHeight) {
+            isDragging = true;
+            dragStartY = y;
+            dragStartScrollTop = scrollTop;
+            return;
+        }
+    }
+}
+
+function handleMouseUp(event) {
+    stopAutoScroll();
+    isDragging = false;
+}
+
+function handleMouseMove(event) {
+    if (!isDragging || totalContentHeight <= canvas.height) return;
+    const rect = canvas.getBoundingClientRect();
+    const y = event.clientY - rect.top;
+    const delta = y - dragStartY;
+
+    const { trackTop, trackHeight, thumbHeight } = getScrollbarMetrics();
+    const scrollableTrack = trackHeight - thumbHeight;
+    if (scrollableTrack <= 0) return;
+
+    const ratio = delta / scrollableTrack;
+    const newScroll = dragStartScrollTop + ratio * maxScroll;
+    scrollToPosition(newScroll);
+}
+
+function handleCanvasClick(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const contentWidth = canvas.width - SCROLLBAR_WIDTH;
+
+    // Click on list
+    if (x < contentWidth) {
+        const index = Math.floor((y + scrollTop) / (lineHeight + GAP_SIZE));
+        if (index >= 0 && index < currentFileListFull.length) {
+            selectedIndex = index;
+            renderSidebar();
+            switchToImageByPath(currentFileListFull[selectedIndex]);
+        }
+        return;
+    }
+
+    // Click on scrollbar track (not buttons, not thumb)
+    if (totalContentHeight <= canvas.height) return;
+
+    const { trackTop, trackHeight, thumbHeight, thumbY, h } = getScrollbarMetrics();
+
+    // Skip if clicked on buttons or thumb (already handled by mousedown)
+    if (SHOW_SCROLLBAR_BUTTONS && (y < BUTTON_HEIGHT || y > h - BUTTON_HEIGHT)) return;
+    if (y >= thumbY && y <= thumbY + thumbHeight) return;
+
+    // Jump to position
+    const scrollableTrack = trackHeight - thumbHeight;
+    if (scrollableTrack <= 0) return;
+
+    const clickRatio = (y - trackTop - (y < thumbY ? 0 : thumbHeight)) / scrollableTrack;
+    const targetScroll = Math.max(0, Math.min(maxScroll, clickRatio * maxScroll));
+    scrollToPosition(targetScroll);
+}
+
+// Attach events
+canvas.addEventListener('mousedown', handleMouseDown);
+canvas.addEventListener('click', handleCanvasClick);
+window.addEventListener('mousemove', handleMouseMove);
+window.addEventListener('mouseup', handleMouseUp);
+
+// Wheel
+function onWheel(e) {
+    if (totalContentHeight <= canvas.height) return;
+    scrollToPosition(scrollTop + e.deltaY);
+    e.preventDefault();
+}
+canvas.addEventListener('wheel', onWheel, { passive: false });
+
+// Resize
+window.addEventListener('resize', () => {
+    updateMetrics();
+    renderSidebar();
+});
+
+// === UTILS ===
 function showError(msg) {
     document.getElementById('error').textContent = msg;
     document.getElementById('error').style.display = 'block';
@@ -124,28 +403,6 @@ function showError(msg) {
 
 function hideError() {
     document.getElementById('error').style.display = 'none';
-}
-
-function updateSidebarByFullPath(fullPath) {
-    const sidebar = document.getElementById('sidebar');
-    const backButtonContainer = sidebar.firstElementChild;
-    sidebar.innerHTML = '';
-    if (backButtonContainer) {
-        sidebar.appendChild(backButtonContainer);
-    }
-
-    currentFileListFull.forEach(fp => {
-        const el = document.createElement('div');
-        el.textContent = fp.replace(/\\/g, '/').split('/').pop();
-        if (fp.toLowerCase() === fullPath.toLowerCase()) {
-            el.classList.add('active');
-            if (initialLoad) {
-                setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 10);
-            }
-        }
-        el.onclick = () => switchToImageByPath(fp);
-        sidebar.appendChild(el);
-    });
 }
 
 async function loadImageByPath(fullPath) {
@@ -174,9 +431,15 @@ async function loadImageByPath(fullPath) {
 
         currentFileListFull = data.file_list_full;
         currentPayload = JSON.parse(atob(data.encoded_data));
-        updateSidebarByFullPath(data.full_path);
 
-        // Настройка кнопки "Назад"
+        selectedIndex = currentFileListFull.findIndex(fp =>
+            fp.toLowerCase() === data.full_path.toLowerCase()
+        );
+        if (selectedIndex === -1) selectedIndex = 0;
+
+        updateMetrics();
+        renderSidebar();
+
         const { folder, regex, save } = currentPayload;
         const url = new URL('/', window.location.origin);
         if (folder) url.searchParams.set('path', folder);
@@ -201,6 +464,7 @@ function switchToImageByPath(fullPath) {
     loadImageByPath(fullPath);
 }
 
+// === INIT ===
 (async () => {
     const urlParts = window.location.pathname.split('/');
     const b64Data = urlParts[urlParts.length - 1];
@@ -221,7 +485,14 @@ function switchToImageByPath(fullPath) {
         currentFileListFull = data.file_list_full;
         currentPayload = JSON.parse(atob(data.encoded_data));
 
-        updateSidebarByFullPath(data.full_path);
+        selectedIndex = currentFileListFull.findIndex(fp =>
+            fp.toLowerCase() === data.full_path.toLowerCase()
+        );
+        if (selectedIndex === -1) selectedIndex = 0;
+
+        updateMetrics();
+        renderSidebar();
+
         loadImageByPath(data.full_path);
         initialLoad = false;
 
