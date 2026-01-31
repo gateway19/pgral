@@ -124,16 +124,28 @@ font-weight: normal;
 </div>
 <div id="error"></div>
 <script>
-// === КОРРЕКТНОЕ КОДИРОВАНИЕ ПУТЕЙ В BASE64 (UTF-8 → Base64) ===
+// === ИСПРАВЛЕНО: корректное UTF-8 → URL-safe base64 (без padding) ===
 function encodePathToB64(str) {
-    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) =>
-        String.fromCharCode(parseInt(p1, 16))
-    ));
+    const utf8 = new TextEncoder().encode(str);
+    let binary = '';
+    for (let i = 0; i < utf8.length; i++) {
+        binary += String.fromCharCode(utf8[i]);
+    }
+    return btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 }
 
-// === КОРРЕКТНОЕ ДЕКОДИРОВАНИЕ BASE64 → UTF-8 СТРОКА ===
+// === ИСПРАВЛЕНО: корректное декодирование URL-safe base64 → UTF-8 ===
 function decodeB64ToUtf8(b64) {
-    const binary = atob(b64);
+    // Восстанавливаем стандартный base64 из URL-safe
+    let standardB64 = b64.replace(/-/g, '+').replace(/_/g, '/');
+    // Добавляем правильный padding
+    const padLength = (4 - (standardB64.length % 4)) % 4;
+    standardB64 += '='.repeat(padLength);
+    // Декодируем
+    const binary = atob(standardB64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
         bytes[i] = binary.charCodeAt(i);

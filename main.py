@@ -6,7 +6,6 @@ import asyncio
 import shutil
 import webbrowser as wb
 import argparse
-
 from pathlib import Path
 from mimetypes import guess_type
 from fastapi import FastAPI, Request, Form, Query
@@ -17,6 +16,12 @@ from io import BytesIO
 from PIL import Image
 from collections import OrderedDict
 import sys
+from concurrent.futures import ThreadPoolExecutor
+
+# --- Ensure SVG is recognized ---
+import mimetypes
+mimetypes.add_type('image/svg+xml', '.svg')
+mimetypes.add_type('image/svg+xml', '.svgz')
 
 # --- Настройки ---
 MAX_CACHE_SIZE_MB = 1024
@@ -46,6 +51,9 @@ templates = Jinja2Templates(directory=get_templates_dir())
 # RAM caches
 image_content_cache = OrderedDict()
 preview_cache = OrderedDict()
+
+# Thread pool for blocking I/O
+_executor = ThreadPoolExecutor(max_workers=2)
 
 def get_local_ip_addresses() -> list[str]:
     import socket
@@ -110,6 +118,19 @@ def get_preview_image(norm_path: str, max_size=(512, 512)):
     if not os.path.isfile(norm_path):
         raise FileNotFoundError()
 
+    media_type, _ = guess_type(norm_path)
+    if not media_type:
+        media_type = 'application/octet-stream'
+
+    # Handle SVG and other non-raster images directly
+    if media_type == 'image/svg+xml':
+        with open(norm_path, 'rb') as f:
+            content = f.read()
+        preview_cache[norm_path] = (media_type, content, asyncio.get_event_loop().time())
+        evict_old_items(preview_cache, MAX_CACHE_SIZE_BYTES // 2)
+        return media_type, content
+
+    # Handle raster images with PIL
     try:
         with Image.open(norm_path) as img:
             if img.mode in ("RGBA", "P"):
@@ -126,17 +147,42 @@ def get_preview_image(norm_path: str, max_size=(512, 512)):
             img.save(buf, format='JPEG', quality=85)
             content = buf.getvalue()
     except Exception:
-        media_type, content = get_full_image(norm_path)
-        return 'image/jpeg', content
+        # Fallback: serve original file if it's an image
+        if media_type.startswith('image/'):
+            with open(norm_path, 'rb') as f:
+                content = f.read()
+            preview_cache[norm_path] = (media_type, content, asyncio.get_event_loop().time())
+            evict_old_items(preview_cache, MAX_CACHE_SIZE_BYTES // 2)
+            return media_type, content
+        else:
+            raise
 
     preview_cache[norm_path] = ('image/jpeg', content, asyncio.get_event_loop().time())
     evict_old_items(preview_cache, MAX_CACHE_SIZE_BYTES // 2)
     return 'image/jpeg', content
 
+# --- NEW: blocking scan moved to sync helper ---
+def _scan_files_sync(folder: str, regex: str):
+    normalized_folder = normalize_path(folder)
+    if not os.path.isdir(normalized_folder):
+        raise FileNotFoundError("Directory not found")
+
+    pattern = re.compile(regex, re.IGNORECASE) if regex else None
+
+    files = []
+    for root, _, filenames in os.walk(normalized_folder):
+        for name in filenames:
+            full_path = os.path.join(root, name)
+            if pattern is None or pattern.search(full_path):
+                files.append(full_path)
+
+    files.sort()
+    return files
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     default_folder = r"C:\Users\admin19\Downloads"
-    default_regex = r".*\.(png|jpg|jpeg|PNG|JPG|JPEG)$"
+    default_regex = r".*\.(png|jpg|jpeg|svg|webp|bmp|gif)$"
     save_mode = request.query_params.get("save") == "true"
     return templates.TemplateResponse("index.html", {
         "request": request,
@@ -152,28 +198,18 @@ async def api_filter_paged(
     offset: int = Form(0),
     limit: int = Form(BATCH_SIZE)
 ):
-    normalized_folder = normalize_path(folder)
-    if not os.path.isdir(normalized_folder):
-        return {"error": "Directory not found"}
-
     try:
-        pattern = re.compile(regex, re.IGNORECASE) if regex else None
+        loop = asyncio.get_event_loop()
+        all_files = await loop.run_in_executor(_executor, _scan_files_sync, folder, regex)
     except re.error as e:
         return {"error": f"Invalid regex: {e}"}
+    except FileNotFoundError as e:
+        return {"error": "Directory not found"}
+    except Exception as e:
+        return {"error": f"Scan failed: {e}"}
 
-    files = []
-    for root, _, filenames in os.walk(normalized_folder):
-        for name in filenames:
-            full_path = os.path.join(root, name)
-            if pattern is None:
-                files.append(full_path)
-            else:
-                if pattern.search(full_path):
-                    files.append(full_path)
-
-    files.sort()
-    total = len(files)
-    batch = files[offset:offset + limit]
+    total = len(all_files)
+    batch = all_files[offset:offset + limit]
     has_more = (offset + limit) < total
 
     return {
@@ -188,7 +224,9 @@ async def api_filter_paged(
 @app.get("/image/{b64_path}")
 async def serve_full_image(b64_path: str):
     try:
-        path = base64.urlsafe_b64decode(b64_path).decode('utf-8')
+        # Fix: add padding before decoding
+        padded = b64_path + '=' * (-len(b64_path) % 4)
+        path = base64.urlsafe_b64decode(padded).decode('utf-8')
         norm_path = normalize_path(path)
         media_type, content = get_full_image(norm_path)
         return Response(content=content, media_type=media_type)
@@ -198,29 +236,31 @@ async def serve_full_image(b64_path: str):
 @app.get("/preview/{b64_path}")
 async def serve_preview(b64_path: str):
     try:
-        path = base64.urlsafe_b64decode(b64_path).decode('utf-8')
+        # Fix: add padding before decoding
+        padded = b64_path + '=' * (-len(b64_path) % 4)
+        path = base64.urlsafe_b64decode(padded).decode('utf-8')
         norm_path = normalize_path(path)
         media_type, content = get_preview_image(norm_path)
         return Response(content=content, media_type=media_type)
     except Exception:
         return HTMLResponse("Preview not available", status_code=404)
 
-# === ИСПРАВЛЕННЫЙ /api/view ===
 @app.get("/api/view")
 async def api_view(data: str = Query(...)):
     try:
-        decoded = base64.urlsafe_b64decode(data).decode('utf-8')
+        # Fix: add padding before decoding
+        padded = data + '=' * (-len(data) % 4)
+        decoded = base64.urlsafe_b64decode(padded).decode('utf-8')
         params = json.loads(decoded)
         folder = params["folder"]
         regex = params["regex"]
-        full_path = params["full_path"]  # ← теперь полный путь
+        full_path = params["full_path"]
     except Exception:
         return JSONResponse({"error": "Invalid data"}, status_code=400)
 
     normalized_folder = normalize_path(folder)
     normalized_file = Path(normalize_path(full_path))
 
-    # Проверка: файл внутри folder?
     try:
         normalized_file.relative_to(normalized_folder)
     except ValueError:
@@ -229,7 +269,6 @@ async def api_view(data: str = Query(...)):
     if not normalized_file.is_file():
         return JSONResponse({"error": "File not found"}, status_code=404)
 
-    # Строим список с учётом regex — возвращаем ПОЛНЫЕ ПУТИ
     try:
         pattern = re.compile(regex, re.IGNORECASE) if regex else None
     except re.error:
@@ -251,7 +290,7 @@ async def api_view(data: str = Query(...)):
         "full_path": str(normalized_file),
         "image_url": image_url,
         "file_list": filenames_only,
-        "file_list_full": file_list_full,  # ← добавлено
+        "file_list_full": file_list_full,
         "encoded_data": data
     })
 
@@ -259,7 +298,6 @@ async def api_view(data: str = Query(...)):
 async def view_page(request: Request, data: str):
     return templates.TemplateResponse("view.html", {"request": request})
 
-# === SAVE MODE ===
 @app.get("/results/list")
 async def list_saved_files():
     try:
@@ -289,12 +327,10 @@ async def save_image(request: Request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# === REGEX CHECKER ===
 @app.get("/regexcheck", response_class=HTMLResponse)
 async def regex_check_page(request: Request):
     return templates.TemplateResponse("regexcheck.html", {"request": request})
 
-# === ЗАПУСК ===
 if __name__ == "__main__":
     local_ips = get_local_ip_addresses()
     print("\n" + "="*80)

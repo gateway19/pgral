@@ -174,9 +174,15 @@ Grid columns:
 </div>
 <script>
 function encodePathToB64(str) {
-    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) =>
-        String.fromCharCode(parseInt(p1, 16))
-    ));
+    const utf8 = new TextEncoder().encode(str);
+    let binary = '';
+    for (let i = 0; i < utf8.length; i++) {
+        binary += String.fromCharCode(utf8[i]);
+    }
+    return btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 }
 
 let currentParams = null;
@@ -290,6 +296,7 @@ function appendThumbs(files) {
         }
         const img = document.createElement('img');
         img.src = `/preview/${b64Path}`;
+
         img.alt = filename;
         img.title = filename;
         img.loading = 'lazy';
