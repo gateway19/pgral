@@ -5,6 +5,7 @@ import json
 import asyncio
 import shutil
 import webbrowser as wb
+import hashlib
 import argparse
 from pathlib import Path
 from mimetypes import guess_type
@@ -344,8 +345,28 @@ async def view_page(request: Request, data: str):
 @app.get("/results/list")
 async def list_saved_files():
     try:
-        files = [f.name for f in RESULTS_DIR.iterdir() if f.is_file()]
-        return JSONResponse(files)
+        hash_file = RESULTS_DIR / "saved_hash.json"
+        if not hash_file.exists():
+            return JSONResponse([])
+
+        with open(hash_file, 'r', encoding='utf-8') as f:
+            mapping = json.load(f)
+
+        # Удаляем записи, для которых нет файла
+        to_remove = []
+        for name, full_path in mapping.items():
+            if not (RESULTS_DIR / name).exists():
+                to_remove.append(name)
+
+        for name in to_remove:
+            del mapping[name]
+
+        # Перезаписываем очищенный маппинг
+        with open(hash_file, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+
+        # Возвращаем только пути
+        return JSONResponse(list(mapping.values()))
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -361,15 +382,35 @@ async def save_image(request: Request):
         if not src.is_file():
             return JSONResponse({"error": "File not found"}, status_code=404)
 
-        dst = RESULTS_DIR / src.name
-        if dst.exists():
-            return JSONResponse({"saved": True, "already_exists": True})
+        # Генерируем уникальное имя: имя_хеш8.ext
+        hash_part = hashlib.md5(str(src).encode()).hexdigest()[:8]
+        name_no_ext = src.stem
+        ext = src.suffix
+        unique_name = f"{name_no_ext}_{hash_part}{ext}"
+        dst = RESULTS_DIR / unique_name
 
+        # Копируем
         shutil.copy2(src, dst)
+
+        # Обновляем saved_hash.json
+        hash_file = RESULTS_DIR / "saved_hash.json"
+        mapping = {}
+        if hash_file.exists():
+            try:
+                with open(hash_file, 'r', encoding='utf-8') as f:
+                    mapping = json.load(f)
+            except:
+                mapping = {}
+
+        mapping[unique_name] = str(src)
+
+        with open(hash_file, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+
         return JSONResponse({"saved": True})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
-
+    
 @app.get("/regexcheck", response_class=HTMLResponse)
 async def regex_check_page(request: Request):
     return templates.TemplateResponse("regexcheck.html", {"request": request})
