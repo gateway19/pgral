@@ -139,6 +139,19 @@ display: none;
 padding: 10px 24px;
 font-size: 16px;
 }
+
+
+@keyframes loadingPulse {
+  0% { background-color: var(--button-bg); }
+  50% { background-color: #6c757d; }
+  100% { background-color: var(--button-bg); }
+}
+
+.button-loading {
+  animation: loadingPulse 1.5s ease-in-out infinite !important;
+  pointer-events: none;
+}
+
 </style>
 </head>
 <body>
@@ -158,7 +171,7 @@ Regex (optional):
 <input type="text" id="regex" name="regex" value="{{ default_regex }}">
 <label for="startIndex">Start index (optional):</label>
 <input type="number" id="startIndex" name="index" min="0" value="{{ request.query_params.get('index', '0') }}" placeholder="0">
-<button type="submit">Apply Filter</button>
+<button type="submit" id="applyBtn">Apply Filter</button>
 </form>
 <div id="grid-controls">
 <label>
@@ -172,11 +185,18 @@ Grid columns:
 <div id="load-more-container">
 <button id="loadMoreBtn">Load more</button>
 </div>
+
 <script>
 function encodePathToB64(str) {
-    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) =>
-        String.fromCharCode(parseInt(p1, 16))
-    ));
+    const utf8 = new TextEncoder().encode(str);
+    let binary = '';
+    for (let i = 0; i < utf8.length; i++) {
+        binary += String.fromCharCode(utf8[i]);
+    }
+    return btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 }
 
 let currentParams = null;
@@ -185,7 +205,7 @@ let hasMore = true;
 let isLoading = false;
 let wheelListener = null;
 let saveMode = {{ 'true' if save_mode else 'false' }};
-let savedFiles = new Set();
+let savedFiles = new Set(); // теперь хранит ПОЛНЫЕ ПУТИ
 
 function updateToggleButton() {
     const btn = document.getElementById('toggleSaveMode');
@@ -202,8 +222,8 @@ async function loadSavedFiles() {
     if (!saveMode) return;
     try {
         const res = await fetch('/results/list');
-        const files = await res.json();
-        savedFiles = new Set(files);
+        const paths = await res.json(); // ← массив полных путей
+        savedFiles = new Set(paths);
         updateAllThumbs();
     } catch (e) {
         console.warn("Не удалось загрузить список сохранённых файлов:", e);
@@ -221,6 +241,10 @@ function getUrlParams() {
 }
 
 async function applyFilters(folder, regex, startIndex = 0) {
+    const applyBtn = document.getElementById('applyBtn');
+    applyBtn.disabled = true;
+    applyBtn.classList.add('button-loading');
+
     currentParams = { folder, regex };
     currentOffset = startIndex;
     hasMore = true;
@@ -230,9 +254,15 @@ async function applyFilters(folder, regex, startIndex = 0) {
     document.getElementById('folder').value = folder;
     document.getElementById('regex').value = regex;
     document.getElementById('startIndex').value = startIndex;
-    await loadBatch(currentOffset);
-    if (saveMode) {
-        await loadSavedFiles();
+
+    try {
+        await loadBatch(currentOffset);
+        if (saveMode) {
+            await loadSavedFiles();
+        }
+    } finally {
+        applyBtn.disabled = false;
+        applyBtn.classList.remove('button-loading');
     }
 }
 
@@ -240,7 +270,11 @@ async function loadBatch(offset) {
     if (isLoading || !hasMore) return;
     isLoading = true;
     const btn = document.getElementById('loadMoreBtn');
-    if (btn) btn.disabled = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('button-loading');
+
+    }
     const formData = new FormData();
     formData.append('folder', currentParams.folder);
     formData.append('regex', currentParams.regex);
@@ -265,7 +299,10 @@ async function loadBatch(offset) {
         hasMore = false;
     }
     isLoading = false;
-    if (btn) btn.disabled = false;
+    if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('button-loading');
+    }
     updateLoadMoreButton();
 }
 
@@ -308,8 +345,8 @@ function updateAllThumbs() {
     if (!saveMode) return;
     document.querySelectorAll('.thumb').forEach(thumb => {
         const fullPath = thumb.dataset.fullPath;
-        const filename = fullPath.replace(/\\/g, '/').split('/').pop();
-        if (savedFiles.has(filename)) {
+        // Сравниваем ПО ПОЛНОМУ ПУТИ, а не по имени!
+        if (savedFiles.has(fullPath)) {
             thumb.style.backgroundColor = '#ffebee';
             thumb.style.border = '4px solid #f44336';
         } else {
@@ -339,13 +376,13 @@ if (saveMode) {
         if (!link || !link.dataset.fullPath) return;
         event.preventDefault();
         const fullPath = link.dataset.fullPath;
-        const filename = fullPath.replace(/\\/g, '/').split('/').pop();
-        if (savedFiles.has(filename)) return;
-        saveFile(fullPath, filename);
+        // Имя больше не нужно для проверки дубликатов
+        if (savedFiles.has(fullPath)) return;
+        saveFile(fullPath);
     });
 }
 
-async function saveFile(fullPath, filename) {
+async function saveFile(fullPath) {
     try {
         const res = await fetch('/api/save-image', {
             method: 'POST',
@@ -354,7 +391,7 @@ async function saveFile(fullPath, filename) {
         });
         const data = await res.json();
         if (data.saved) {
-            savedFiles.add(filename);
+            savedFiles.add(fullPath); // ← добавляем ПУТЬ
             updateAllThumbs();
         }
     } catch (err) {
@@ -433,5 +470,6 @@ window.addEventListener('scroll', () => {
     }
 });
 </script>
+
 </body>
 </html>
