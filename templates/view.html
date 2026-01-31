@@ -153,6 +153,37 @@ function decodeB64ToUtf8(b64) {
     return new TextDecoder('utf-8').decode(bytes);
 }
 
+
+function fallbackCopyText(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    // Скрываем элемент, но не используем display:none (иначе select() не сработает)
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        const success = document.execCommand('copy');
+        if (success) {
+            // Опционально: показать подтверждение
+            const originalTitle = document.querySelector('#preview img').title;
+            document.querySelector('#preview img').title = "✓ Скопировано!";
+            setTimeout(() => {
+                document.querySelector('#preview img').title = originalTitle;
+            }, 1500);
+        } else {
+            console.warn("document.execCommand('copy') вернул false");
+        }
+    } catch (err) {
+        console.error("Ошибка копирования:", err);
+        alert("Не удалось скопировать путь. Попробуйте вручную.");
+    } finally {
+        document.body.removeChild(textarea);
+    }
+}
+
+
 // === UNIVERSAL MOBILE DETECTION ===
 function getMobileBreakpoint() {
     const style = getComputedStyle(document.documentElement);
@@ -489,7 +520,15 @@ function showImageImmediately(fullPath) {
     img.alt = fullPath;
     img.title = fullPath;
     document.title = `View: ${fullPath.replace(/\\/g, '/').split('/').pop()}`;
+
+    // Копирование пути — только через fallback (работает на http://192.168.x.x)
+    img.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fallbackCopyText(fullPath);
+    });
+
     preview.appendChild(img);
+
     document.getElementById('mobileBurger').addEventListener('click', () => {
         if (document.body.classList.contains('mobile-mode')) {
             document.getElementById('sidebar').classList.toggle('visible');
