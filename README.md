@@ -3,11 +3,16 @@ pgral (Photo gallery grid app local)
 
 
 # run 
-Download lastest [release](https://github.com/gateway19/pgral/releases/)  \
-save to folder \
-Create shortcut  PROGRAM_PATH/pgral.exe -u "http://127.0.0.1:8095/?path=C:\Users\username\Downloads\&regex=.*\.(png|jpg|jpeg)$" \
-or to PROGRAM_PATH/updater.exe -u "http://127.0.0.1:8095/?path=C:\Users\username\Downloads\&regex=.*\.(png|jpg|jpeg)$" -v main for auto update \
-
+1.Download lastest [release](https://github.com/gateway19/pgral/releases/)  \
+2. Save to folder \
+3. Create shortcut to  
+```
+PROGRAM_PATH/pgral.exe -u "http://127.0.0.1:8095/?path=C:\Users\username\Downloads\&regex=.*\.(png|jpg|jpeg)$" 
+```
+OR (for auto update ) 
+```
+PROGRAM_PATH/updater.exe -u "http://127.0.0.1:8095/?path=C:\Users\username\Downloads\&regex=.*\.(png|jpg|jpeg)$" -v main 
+```
 
 # dev 
 ```cmd
