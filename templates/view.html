@@ -123,7 +123,7 @@ font-weight: normal;
 <div class="loading">Loading...</div>
 </div>
 <div id="error"></div>
-<script>
+ <script>
 // === ИСПРАВЛЕНО: корректное UTF-8 → URL-safe base64 (без padding) ===
 function encodePathToB64(str) {
     const utf8 = new TextEncoder().encode(str);
@@ -153,11 +153,9 @@ function decodeB64ToUtf8(b64) {
     return new TextDecoder('utf-8').decode(bytes);
 }
 
-
 function fallbackCopyText(text) {
     const textarea = document.createElement('textarea');
     textarea.value = text;
-    // Скрываем элемент, но не используем display:none (иначе select() не сработает)
     textarea.style.position = 'fixed';
     textarea.style.top = '-9999px';
     textarea.style.left = '-9999px';
@@ -166,7 +164,6 @@ function fallbackCopyText(text) {
     try {
         const success = document.execCommand('copy');
         if (success) {
-            // Опционально: показать подтверждение
             const originalTitle = document.querySelector('#preview img').title;
             document.querySelector('#preview img').title = "✓ Скопировано!";
             setTimeout(() => {
@@ -182,7 +179,6 @@ function fallbackCopyText(text) {
         document.body.removeChild(textarea);
     }
 }
-
 
 // === UNIVERSAL MOBILE DETECTION ===
 function getMobileBreakpoint() {
@@ -273,6 +269,26 @@ function updateMetrics() {
     maxScroll = Math.max(0, totalContentHeight - viewportHeight);
     scrollTop = Math.min(scrollTop, maxScroll);
 }
+
+function scrollToPosition(pos) {
+    scrollTop = Math.max(0, Math.min(maxScroll, pos));
+    renderSidebar();
+}
+
+// >>> НОВАЯ ФУНКЦИЯ: прокрутка к индексу <<<
+function scrollToIndex(index) {
+    if (index < 0 || index >= currentFileListFull.length) return;
+    const itemTop = index * (lineHeight + GAP_SIZE);
+    const itemBottom = itemTop + lineHeight;
+    const viewportHeight = canvas.height;
+
+    if (itemTop < scrollTop) {
+        scrollToPosition(itemTop);
+    } else if (itemBottom > scrollTop + viewportHeight) {
+        scrollToPosition(itemBottom - viewportHeight);
+    }
+}
+
 function getScrollbarMetrics() {
     const h = canvas.height;
     const trackTop = SHOW_SCROLLBAR_BUTTONS ? BUTTON_HEIGHT : 0;
@@ -339,10 +355,6 @@ function renderSidebar() {
         ctx.lineWidth = 1;
         ctx.strokeRect(width - SCROLLBAR_WIDTH, thumbY, SCROLLBAR_WIDTH, thumbHeight);
     }
-}
-function scrollToPosition(pos) {
-    scrollTop = Math.max(0, Math.min(maxScroll, pos));
-    renderSidebar();
 }
 function startAutoScroll(direction) {
     if (autoScrollInterval) return;
@@ -521,7 +533,6 @@ function showImageImmediately(fullPath) {
     img.title = fullPath;
     document.title = `View: ${fullPath.replace(/\\/g, '/').split('/').pop()}`;
 
-    // Копирование пути — только через fallback (работает на http://192.168.x.x)
     img.addEventListener('click', (e) => {
         e.stopPropagation();
         fallbackCopyText(fullPath);
@@ -535,6 +546,7 @@ function showImageImmediately(fullPath) {
         }
     });
 }
+
 async function loadMetadataAndSidebar(b64Payload) {
     try {
         const res = await fetch(`/api/view?data=${encodeURIComponent(b64Payload)}`);
@@ -544,15 +556,22 @@ async function loadMetadataAndSidebar(b64Payload) {
         }
         const data = await res.json();
         currentFileListFull = data.file_list_full;
-        // Декодируем payload на стороне клиента правильно
         const jsonString = decodeB64ToUtf8(data.encoded_data);
         currentPayload = JSON.parse(jsonString);
         selectedIndex = currentFileListFull.findIndex(fp =>
             fp.toLowerCase() === data.full_path.toLowerCase()
         );
         if (selectedIndex === -1) selectedIndex = 0;
+
         updateMetrics();
         renderSidebar();
+
+        // >>> ПРОКРУТКА ТОЛЬКО ПРИ ПЕРВОЙ ЗАГРУЗКЕ <<<
+        if (initialLoad) {
+            scrollToIndex(selectedIndex);
+            initialLoad = false;
+        }
+
         const { folder, regex, save } = currentPayload;
         const url = new URL('/', window.location.origin);
         if (folder) url.searchParams.set('path', folder);
@@ -565,6 +584,7 @@ async function loadMetadataAndSidebar(b64Payload) {
         console.warn("Metadata load failed:", err.message);
     }
 }
+
 function switchToImageByPath(fullPath) {
     const newPayload = { ...currentPayload, full_path: fullPath };
     const newB64 = encodePathToB64(JSON.stringify(newPayload));
@@ -595,11 +615,12 @@ function switchToImageByPath(fullPath) {
         currentPayload = decoded;
         await showImageImmediately(fullPath);
         await loadMetadataAndSidebar(b64Data);
-        initialLoad = false;
+        initialLoad = false; // на случай, если метаданные не загрузились — защита от зацикливания
     } catch (err) {
         showError("Initial load failed: " + err.message);
     }
 })();
+
 window.addEventListener('popstate', () => {
     const urlParts = window.location.pathname.split('/');
     const b64Data = urlParts[urlParts.length - 1];
@@ -608,5 +629,6 @@ window.addEventListener('popstate', () => {
     }
 });
 </script>
+
 </body>
 </html>

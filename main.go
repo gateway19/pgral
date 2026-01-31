@@ -72,6 +72,9 @@ func main() {
 	if *v == "main" || *v == "beta" {
 		update(*v, pgralPath)
 	}
-
-	exec.Command("cmd", "/c", "start", "", pgralPath, "-u", u_argument).Start()
+	if u_argument != "\"\"" {
+		exec.Command("cmd", "/c", "start", "", pgralPath, "-u", u_argument).Start()
+	} else {
+		exec.Command("cmd", "/c", "start", "", pgralPath).Start()
+	}
 }
