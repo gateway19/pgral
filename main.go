@@ -44,6 +44,7 @@ func update(ver, app string) { // do later
 	}
 	if loc != rem {
 		// update
+		fmt.Println("Обновляемся до ", ver, rver)
 		update_url := fmt.Sprintf("https://github.com/gateway19/pgral/releases/download/%s/pgral.exe", rver)
 		resp, err := http.Get(update_url)
 		if err != nil {
