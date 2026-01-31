@@ -17,15 +17,28 @@ from PIL import Image
 from collections import OrderedDict
 import sys
 from concurrent.futures import ThreadPoolExecutor
-# --- КЭШ ДЛЯ СКАНИРОВАНИЯ ---
 from collections import OrderedDict
 import time
-
-
-# --- Ensure SVG is recognized ---
+import json
 import mimetypes
 mimetypes.add_type('image/svg+xml', '.svg')
 mimetypes.add_type('image/svg+xml', '.svgz')
+
+def get_resource_path(relative_path):
+    """ Получить абсолютный путь к ресурсу, работает и в .py, и в .exe """
+    try:
+        # PyInstaller создаёт временную папку _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = Path(__file__).parent
+    return os.path.join(base_path, relative_path)
+
+
+with open(get_resource_path('info.json'), 'r', encoding='utf-8') as f:
+    config = json.load(f)
+app_version = config.get('version','0.0.U')
+
+
 
 # --- Настройки ---
 MAX_CACHE_SIZE_MB = 1024
@@ -366,7 +379,7 @@ async def regex_check_page(request: Request):
 if __name__ == "__main__":
     local_ips = get_local_ip_addresses()
     print("\n" + "="*80)
-    print("📸 Photo Gallery Application")
+    print("📸 Photo Gallery Application \nV:" + app_version)
     print("="*80)
     print(f"• Starting server on http://127.0.0.1:8095")
     for ip in local_ips:
