@@ -293,7 +293,6 @@ async def serve_preview(b64_path: str):
 @app.get("/api/view")
 async def api_view(data: str = Query(...)):
     try:
-        # Fix: add padding before decoding
         padded = data + '=' * (-len(data) % 4)
         decoded = base64.urlsafe_b64decode(padded).decode('utf-8')
         params = json.loads(decoded)
@@ -314,17 +313,16 @@ async def api_view(data: str = Query(...)):
     if not normalized_file.is_file():
         return JSONResponse({"error": "File not found"}, status_code=404)
 
+    # >>> ИСПОЛЬЗУЕМ КЭШИРОВАННОЕ СКАНИРОВАНИЕ <<<
     try:
-        pattern = re.compile(regex, re.IGNORECASE) if regex else None
-    except re.error:
-        return JSONResponse({"error": "Invalid regex in view data"}, status_code=400)
-
-    file_list_full = []
-    for root, _, filenames in os.walk(normalized_folder):
-        for name in filenames:
-            fp = os.path.join(root, name)
-            if pattern is None or pattern.search(fp):
-                file_list_full.append(fp)
+        loop = asyncio.get_event_loop()
+        file_list_full = await loop.run_in_executor(_executor, _scan_files_sync, folder, regex)
+    except re.error as e:
+        return JSONResponse({"error": f"Invalid regex: {e}"}, status_code=400)
+    except FileNotFoundError:
+        return JSONResponse({"error": "Directory not found"}, status_code=404)
+    except Exception as e:
+        return JSONResponse({"error": f"Scan failed: {e}"}, status_code=500)
 
     b64_path = base64.urlsafe_b64encode(str(normalized_file).encode()).decode()
     image_url = f"/image/{b64_path}"
