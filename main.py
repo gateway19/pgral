@@ -17,6 +17,10 @@ from PIL import Image
 from collections import OrderedDict
 import sys
 from concurrent.futures import ThreadPoolExecutor
+# --- КЭШ ДЛЯ СКАНИРОВАНИЯ ---
+from collections import OrderedDict
+import time
+
 
 # --- Ensure SVG is recognized ---
 import mimetypes
@@ -27,6 +31,10 @@ mimetypes.add_type('image/svg+xml', '.svgz')
 MAX_CACHE_SIZE_MB = 1024
 MAX_CACHE_SIZE_BYTES = MAX_CACHE_SIZE_MB * 1024 * 1024
 BATCH_SIZE = 150
+
+SCAN_CACHE = OrderedDict()  # key: (norm_folder, regex) -> (file_list, timestamp)
+SCAN_CACHE_TTL = 600  # 10 минут
+MAX_SCAN_CACHE_ENTRIES = 20  # ограничение числа записей
 
 def get_base_dir():
     if getattr(sys, 'frozen', False):
@@ -167,16 +175,40 @@ def _scan_files_sync(folder: str, regex: str):
     if not os.path.isdir(normalized_folder):
         raise FileNotFoundError("Directory not found")
 
-    pattern = re.compile(regex, re.IGNORECASE) if regex else None
+    cache_key = (normalized_folder, regex)
 
+    # Очистка устаревших записей + LRU при превышении лимита
+    current_time = time.time()
+    keys_to_remove = []
+    for key, (_, ts) in SCAN_CACHE.items():
+        if current_time - ts > SCAN_CACHE_TTL:
+            keys_to_remove.append(key)
+    for key in keys_to_remove:
+        del SCAN_CACHE[key]
+
+    # Проверка кэша
+    if cache_key in SCAN_CACHE:
+        file_list, _ = SCAN_CACHE[cache_key]
+        # Обновляем порядок (LRU)
+        SCAN_CACHE.move_to_end(cache_key)
+        return file_list
+
+    # Сканирование
+    pattern = re.compile(regex, re.IGNORECASE) if regex else None
     files = []
     for root, _, filenames in os.walk(normalized_folder):
         for name in filenames:
             full_path = os.path.join(root, name)
             if pattern is None or pattern.search(full_path):
                 files.append(full_path)
-
     files.sort()
+
+    # Сохранение в кэш
+    SCAN_CACHE[cache_key] = (files, current_time)
+    # Ограничение размера кэша (LRU)
+    if len(SCAN_CACHE) > MAX_SCAN_CACHE_ENTRIES:
+        SCAN_CACHE.popitem(last=False)  # удаляем самую старую
+
     return files
 
 @app.get("/", response_class=HTMLResponse)

@@ -139,6 +139,19 @@ display: none;
 padding: 10px 24px;
 font-size: 16px;
 }
+
+
+@keyframes loadingPulse {
+  0% { background-color: var(--button-bg); }
+  50% { background-color: #6c757d; }
+  100% { background-color: var(--button-bg); }
+}
+
+.button-loading {
+  animation: loadingPulse 1.5s ease-in-out infinite !important;
+  pointer-events: none;
+}
+
 </style>
 </head>
 <body>
@@ -158,7 +171,7 @@ Regex (optional):
 <input type="text" id="regex" name="regex" value="{{ default_regex }}">
 <label for="startIndex">Start index (optional):</label>
 <input type="number" id="startIndex" name="index" min="0" value="{{ request.query_params.get('index', '0') }}" placeholder="0">
-<button type="submit">Apply Filter</button>
+<button type="submit" id="applyBtn">Apply Filter</button>
 </form>
 <div id="grid-controls">
 <label>
@@ -227,6 +240,11 @@ function getUrlParams() {
 }
 
 async function applyFilters(folder, regex, startIndex = 0) {
+    const applyBtn = document.getElementById('applyBtn');
+    applyBtn.disabled = true;
+    applyBtn.classList.add('button-loading');
+
+
     currentParams = { folder, regex };
     currentOffset = startIndex;
     hasMore = true;
@@ -236,9 +254,16 @@ async function applyFilters(folder, regex, startIndex = 0) {
     document.getElementById('folder').value = folder;
     document.getElementById('regex').value = regex;
     document.getElementById('startIndex').value = startIndex;
-    await loadBatch(currentOffset);
-    if (saveMode) {
-        await loadSavedFiles();
+
+    try {
+        await loadBatch(currentOffset);
+        if (saveMode) {
+            await loadSavedFiles();
+        }
+    } finally {
+        applyBtn.disabled = false;
+        applyBtn.classList.remove('button-loading');
+
     }
 }
 
