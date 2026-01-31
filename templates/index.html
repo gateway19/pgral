@@ -270,7 +270,11 @@ async function loadBatch(offset) {
     if (isLoading || !hasMore) return;
     isLoading = true;
     const btn = document.getElementById('loadMoreBtn');
-    if (btn) btn.disabled = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('button-loading');
+
+    }
     const formData = new FormData();
     formData.append('folder', currentParams.folder);
     formData.append('regex', currentParams.regex);
@@ -295,7 +299,10 @@ async function loadBatch(offset) {
         hasMore = false;
     }
     isLoading = false;
-    if (btn) btn.disabled = false;
+    if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('button-loading');
+    }
     updateLoadMoreButton();
 }
 
